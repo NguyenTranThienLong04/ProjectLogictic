@@ -1,0 +1,100 @@
+name: Release gates
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      publish_images:
+        description: Publish the tested staging images to GHCR (no deployment)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-disposable-only
+          POSTGRES_DB: i1_control
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci -d i1_control"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7.4-alpine
+        ports: ['56379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Select immutable migration baseline
+        env:
+          EVENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -n "$EVENT_BASE" && "$EVENT_BASE" != 0000000000000000000000000000000000000000 ]]; then
+            echo "MIGRATION_BASE_REF=$EVENT_BASE" >> "$GITHUB_ENV"
+          else
+            echo "MIGRATION_BASE_REF=$(git rev-parse HEAD^)" >> "$GITHUB_ENV"
+          fi
+      - name: Install → lint → typecheck → unit → E2E → build → migrations → Playwright/smoke → audit
+        env:
+          CI_DATABASE_ADMIN_URL: postgresql://ci:ci-disposable-only@127.0.0.1:55432/i1_control
+        run: bash deploy/ci/verify.sh
+      - name: Build production artifacts and verify container/proxy lifecycle
+        run: bash deploy/ci/containers.sh
+      - name: Publish the exact tested images to GHCR
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_images && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash deploy/ci/publish-images.sh
+      - name: Record immutable staging image digests
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_images && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-images-${{ github.sha }}
+          path: test-results/i3/images.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-failure-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+      - name: Record verified source
+        run: echo "All gates passed for $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+  release-gate:
+    if: always()
+    needs: [verify]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fail closed
+        env:
+          VERIFY_RESULT: ${{ needs.verify.result }}
+        run: test "$VERIFY_RESULT" = success
+# Registry publication requires explicit workflow_dispatch publish_images=true.
+# No deployment occurs in this workflow. Only the exact tested images are published.
+# Protect the branch with required check "release-gate"; staging promotion must depend on it.

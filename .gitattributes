@@ -1,0 +1,6 @@
+# Prisma hashes exact bytes. Preserve the canonical SQL bytes across platforms.
+backend/prisma/migrations/** -text
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.conf text eol=lf

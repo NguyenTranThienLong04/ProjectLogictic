@@ -1,0 +1,33 @@
+# Internal artifacts only; managed PostgreSQL/Redis/SMTP and TLS ingress are provisioned separately.
+services:
+  migrate:
+    image: ${MIGRATION_IMAGE:?Use the verified immutable migration image digest}
+    profiles: [migration]
+    environment:
+      # Runtime-only compose operations need no migration secret; entrypoint requires it for this job.
+      DIRECT_URL: ${DIRECT_URL:-}
+    restart: 'no'
+  backend:
+    image: ${BACKEND_IMAGE:?Use the verified immutable backend image digest}
+    env_file: ${STAGING_ENV_FILE:?Path to a protected runtime env file outside the repository}
+    environment:
+      NODE_ENV: production
+      ROUTE_PROVIDER: DISABLED
+      PAYMENT_PROVIDER: DISABLED
+      ROUTE_PROVIDER_BASE_URL: ''
+      PAYMENT_TEST_WEBHOOK_SECRET: ''
+      PORT: '3000'
+      TRUST_PROXY_HOPS: '2'
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 45s
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  frontend:
+    image: ${FRONTEND_IMAGE:?Use the verified immutable frontend image digest}
+    depends_on:
+      backend:
+        condition: service_healthy
+    # TLS ingress on this host is the only caller. Do not expose backend:3000.
+    ports: ['127.0.0.1:8080:8080']
+    restart: unless-stopped

@@ -1,0 +1,11 @@
+process.env.NODE_ENV = 'test';
+process.env.FRONTEND_URL = 'http://localhost:5173';
+process.env.EMAIL_DELIVERY_ENABLED = 'false';
+process.env.SWAGGER_ENABLED = 'false';
+process.env.TRUST_PROXY_HOPS = '0';
+process.env.REFRESH_COOKIE_NAME = 'logistics_refresh';
+process.env.REFRESH_COOKIE_SAME_SITE = 'lax';
+process.env.PASSWORD_RESET_URL = 'http://localhost:5173/reset-password';
+process.env.PAYMENT_PROVIDER = 'TEST';
+process.env.PAYMENT_TEST_WEBHOOK_SECRET = 'phase-h3-test-only-webhook-secret-32-characters';
+process.env.PAYMENT_TIMEOUT_MS = '5000';

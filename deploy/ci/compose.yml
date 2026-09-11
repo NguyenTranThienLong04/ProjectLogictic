@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ci
+      POSTGRES_PASSWORD: ci-container-disposable
+      POSTGRES_DB: i1_container
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ci -d i1_container']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7.4-alpine
+    command: ['redis-server', '--maxmemory-policy', 'noeviction']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  migrate:
+    image: logistics-i2-migration:${RELEASE_TAG:-local}
+    profiles: [migration]
+    environment:
+      DIRECT_URL: postgresql://ci:ci-container-disposable@postgres:5432/i1_container
+  backend:
+    image: logistics-i2-backend:${RELEASE_TAG:-local}
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      DATABASE_URL: postgresql://ci:ci-container-disposable@postgres:5432/i1_container
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${I2_CONTAINER_JWT:?Ephemeral CI JWT required}
+      FRONTEND_URL: https://localhost:18443
+      PASSWORD_RESET_URL: https://localhost:18443/reset-password
+      REFRESH_COOKIE_NAME: __Secure-logistics_refresh
+      REFRESH_COOKIE_SAME_SITE: lax
+      TRUST_PROXY_HOPS: '2'
+      SWAGGER_ENABLED: 'false'
+      EMAIL_DELIVERY_ENABLED: 'false'
+      ROUTE_PROVIDER: DISABLED
+      PAYMENT_PROVIDER: DISABLED
+    stop_grace_period: 45s
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  frontend:
+    image: logistics-i2-frontend:${RELEASE_TAG:-local}
+    depends_on:
+      backend:
+        condition: service_healthy
+  ingress:
+    image: nginx:1.28-alpine
+    depends_on:
+      frontend:
+        condition: service_healthy
+    ports: ['127.0.0.1:18443:443']
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/healthz']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - ./ingress.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../../test-results/i2/tls:/etc/nginx/tls:ro

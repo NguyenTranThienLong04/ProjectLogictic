@@ -1,0 +1,780 @@
+generator client {
+  provider               = "prisma-client"
+  previewFeatures        = ["relationJoins"]
+  output                 = "../src/generated/prisma"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  WAREHOUSE_STAFF
+  DISPATCHER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ShipmentStatus {
+  PENDING
+  CONFIRMED
+  AWAITING_PICKUP_ASSIGNMENT
+  PICKUP_ASSIGNED
+  PICKUP_IN_PROGRESS
+  PICKED_UP
+  AT_ORIGIN_WAREHOUSE
+  IN_TRANSIT
+  AT_DESTINATION_WAREHOUSE
+  AWAITING_DELIVERY_ASSIGNMENT
+  DELIVERY_ASSIGNED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELIVERY_FAILED
+  RETURN_REQUESTED
+  RETURN_IN_TRANSIT
+  RETURNED
+  CANCELLED
+  DAMAGED
+  LOST
+}
+
+enum ShippingFeePayer {
+  SENDER
+  RECEIVER
+}
+
+enum ShippingFeeTransactionStatus {
+  PENDING
+  PAYMENT_PENDING
+  PAID
+  COLLECTED
+  REMITTED
+  SETTLED
+  DISPUTED
+  CANCELLED
+}
+
+enum ShippingFeePaymentStatus {
+  CREATING
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum ShippingFeePaymentEventType {
+  SUCCEEDED
+  FAILED
+}
+
+enum DriverStatus {
+  OFFLINE
+  AVAILABLE
+  BUSY
+  SUSPENDED
+}
+
+enum DriverCapability {
+  PICKUP
+  DELIVERY
+  LINE_HAUL
+}
+
+enum LineHaulVehicleStatus {
+  AVAILABLE
+  IN_USE
+  MAINTENANCE
+  INACTIVE
+}
+
+enum LineHaulTripStatus {
+  PLANNED
+  READY
+  IN_TRANSIT
+  ARRIVED
+  CANCELLED
+}
+
+enum RouteMetricMode {
+  ROAD_ROUTE
+  HAVERSINE_FALLBACK
+}
+
+enum LineHaulTripRouteType {
+  PLANNED
+  REROUTE
+}
+
+enum DriverAssignmentType {
+  PICKUP
+  DELIVERY
+}
+
+enum DriverAssignmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum ShipmentProofType {
+  PICKUP
+  DELIVERY
+}
+
+enum DeliveryAttemptStatus {
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+}
+
+enum CODTransactionStatus {
+  PENDING
+  COLLECTED
+  REMITTED
+  SETTLED
+  DISPUTED
+}
+
+enum DeliveryFailureReason {
+  RECIPIENT_UNAVAILABLE
+  RECIPIENT_REJECTED
+  WRONG_ADDRESS
+  INVALID_PHONE
+  ADDRESS_NOT_FOUND
+  VEHICLE_ISSUE
+  WEATHER
+  OTHER
+}
+
+enum WarehouseTransferStatus {
+  PENDING
+  IN_TRANSIT
+  COMPLETED
+  CANCELLED
+}
+
+enum TrackingVisibility {
+  PUBLIC
+  INTERNAL
+}
+
+model User {
+  id                          String                   @id @default(uuid()) @db.Uuid
+  email                       String                   @unique @db.VarChar(254)
+  passwordHash                String                   @db.Text
+  fullName                    String                   @db.VarChar(100)
+  phone                       String?                  @db.VarChar(20)
+  role                        UserRole                 @default(CUSTOMER)
+  status                      UserStatus               @default(ACTIVE)
+  mustChangePassword          Boolean                  @default(false)
+  tokenVersion                Int                      @default(0)
+  passwordChangedAt           DateTime                 @default(now()) @db.Timestamptz(3)
+  createdAt                   DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt                   DateTime                 @updatedAt @db.Timestamptz(3)
+  sessions                    AuthSession[]
+  passwordResetTokens         PasswordResetToken[]
+  addresses                   CustomerAddress[]
+  customerShipments           Shipment[]               @relation("CustomerShipments")
+  cancelledShipments          Shipment[]               @relation("CancelledShipments")
+  trackingEvents              TrackingEvent[]          @relation("TrackingEventActor")
+  auditLogs                   AuditLog[]               @relation("AuditLogActor")
+  pricingConfigs              PricingConfig[]          @relation("PricingConfigCreator")
+  driverProfile               DriverProfile?
+  warehouseStaffProfile       WarehouseStaffProfile?
+  assignmentsCreated          DriverAssignment[]       @relation("AssignmentCreator")
+  proofsCreated               ShipmentProof[]          @relation("ProofCreator")
+  transfersCreated            WarehouseTransfer[]      @relation("TransferCreator")
+  transfersDispatched         WarehouseTransfer[]      @relation("TransferDispatcher")
+  transfersReceived           WarehouseTransfer[]      @relation("TransferReceiver")
+  transfersCancelled          WarehouseTransfer[]      @relation("TransferCanceller")
+  lineHaulTripsCreated        LineHaulTrip[]           @relation("LineHaulTripCreator")
+  lineHaulTripsCancelled      LineHaulTrip[]           @relation("LineHaulTripCanceller")
+  lineHaulTransfersAssigned   LineHaulTripTransfer[]   @relation("LineHaulTransferAssigner")
+  lineHaulTransfersRemoved    LineHaulTripTransfer[]   @relation("LineHaulTransferRemover")
+  lineHaulRoutesCreated       LineHaulTripRoute[]      @relation("LineHaulTripRouteCreator")
+  shippingFeesSettled         ShippingFeeTransaction[] @relation("ShippingFeeSettler")
+  shippingFeeDisputesOpened   ShippingFeeDispute[]     @relation("ShippingFeeDisputeOpener")
+  shippingFeeDisputesResolved ShippingFeeDispute[]     @relation("ShippingFeeDisputeResolver")
+  shippingFeePaymentsStarted  ShippingFeePayment[]     @relation("ShippingFeePaymentInitiator")
+  notifications               Notification[]
+
+  @@index([role, status])
+}
+
+model PricingConfig {
+  id                  String   @id @default(uuid()) @db.Uuid
+  version             Int      @unique
+  baseFee             Int
+  includedWeightGrams Int
+  extraWeightFeePerKg Int
+  codFeeBasisPoints   Int
+  distanceFee         Int      @default(0)
+  surcharge           Int      @default(0)
+  discount            Int      @default(0)
+  isActive            Boolean  @default(true)
+  createdById         String?  @db.Uuid
+  createdAt           DateTime @default(now()) @db.Timestamptz(3)
+  createdBy           User?    @relation("PricingConfigCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([isActive, createdAt])
+}
+
+model Warehouse {
+  id                       String                  @id @default(uuid()) @db.Uuid
+  code                     String                  @unique @db.VarChar(32)
+  name                     String                  @db.VarChar(100)
+  address                  String                  @db.VarChar(255)
+  ward                     String?                 @db.VarChar(100)
+  district                 String?                 @db.VarChar(100)
+  city                     String                  @db.VarChar(100)
+  latitude                 Decimal?                @db.Decimal(9, 6)
+  longitude                Decimal?                @db.Decimal(9, 6)
+  isActive                 Boolean                 @default(true)
+  version                  Int                     @default(0)
+  createdAt                DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime                @updatedAt @db.Timestamptz(3)
+  staffProfiles            WarehouseStaffProfile[]
+  originShipments          Shipment[]              @relation("OriginWarehouse")
+  destinationShipments     Shipment[]              @relation("DestinationWarehouse")
+  currentShipments         Shipment[]              @relation("CurrentWarehouse")
+  returnShipments          Shipment[]              @relation("ReturnWarehouse")
+  transfersFrom            WarehouseTransfer[]     @relation("TransferOrigin")
+  transfersTo              WarehouseTransfer[]     @relation("TransferDestination")
+  trackingEvents           TrackingEvent[]
+  operatingDrivers         DriverProfile[]
+  originLineHaulTrips      LineHaulTrip[]          @relation("LineHaulTripOrigin")
+  destinationLineHaulTrips LineHaulTrip[]          @relation("LineHaulTripDestination")
+
+  @@index([city, isActive])
+  @@index([isActive])
+}
+
+model WarehouseStaffProfile {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @unique @db.Uuid
+  warehouseId String    @db.Uuid
+  staffCode   String    @unique @db.VarChar(32)
+  isActive    Boolean   @default(true)
+  version     Int       @default(0)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@index([warehouseId, isActive])
+}
+
+model Shipment {
+  id                         String                  @id @default(uuid()) @db.Uuid
+  trackingCode               String                  @unique @db.VarChar(32)
+  clientRequestId            String                  @db.Uuid
+  customerId                 String                  @db.Uuid
+  senderSnapshot             Json                    @db.JsonB
+  receiverSnapshot           Json                    @db.JsonB
+  pickupSnapshot             Json                    @db.JsonB
+  deliverySnapshot           Json                    @db.JsonB
+  packageSnapshot            Json                    @db.JsonB
+  pricingSnapshot            Json                    @db.JsonB
+  codAmount                  Int                     @default(0)
+  totalFee                   Int
+  shippingFeePayer           ShippingFeePayer        @default(SENDER)
+  status                     ShipmentStatus          @default(PENDING)
+  version                    Int                     @default(0)
+  originWarehouseId          String?                 @db.Uuid
+  destinationWarehouseId     String?                 @db.Uuid
+  currentWarehouseId         String?                 @db.Uuid
+  returnWarehouseId          String?                 @db.Uuid
+  cancelledById              String?                 @db.Uuid
+  cancelledAt                DateTime?               @db.Timestamptz(3)
+  cancellationReason         String?                 @db.VarChar(500)
+  cancellationPreviousStatus ShipmentStatus?
+  confirmedAt                DateTime?               @db.Timestamptz(3)
+  pickedUpAt                 DateTime?               @db.Timestamptz(3)
+  createdAt                  DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt                  DateTime                @updatedAt @db.Timestamptz(3)
+  customer                   User                    @relation("CustomerShipments", fields: [customerId], references: [id], onDelete: Restrict)
+  cancelledBy                User?                   @relation("CancelledShipments", fields: [cancelledById], references: [id], onDelete: Restrict)
+  originWarehouse            Warehouse?              @relation("OriginWarehouse", fields: [originWarehouseId], references: [id], onDelete: Restrict)
+  destinationWarehouse       Warehouse?              @relation("DestinationWarehouse", fields: [destinationWarehouseId], references: [id], onDelete: Restrict)
+  currentWarehouse           Warehouse?              @relation("CurrentWarehouse", fields: [currentWarehouseId], references: [id], onDelete: Restrict)
+  returnWarehouse            Warehouse?              @relation("ReturnWarehouse", fields: [returnWarehouseId], references: [id], onDelete: Restrict)
+  trackingEvents             TrackingEvent[]
+  driverAssignments          DriverAssignment[]
+  proofs                     ShipmentProof[]
+  deliveryAttempts           DeliveryAttempt[]
+  transfers                  WarehouseTransfer[]
+  codTransaction             CODTransaction?
+  shippingFeeTransaction     ShippingFeeTransaction?
+
+  @@unique([customerId, clientRequestId])
+  @@index([createdAt])
+  @@index([customerId, createdAt])
+  @@index([status, createdAt])
+  @@index([currentWarehouseId, status])
+  @@index([originWarehouseId])
+  @@index([destinationWarehouseId])
+  @@index([returnWarehouseId, status])
+}
+
+model CODTransaction {
+  id                  String               @id @default(uuid()) @db.Uuid
+  shipmentId          String               @unique @db.Uuid
+  expectedAmount      Int
+  collectedAmount     Int?
+  remittedAmount      Int?
+  status              CODTransactionStatus @default(PENDING)
+  collectedByDriverId String?              @db.Uuid
+  collectedAt         DateTime?            @db.Timestamptz(3)
+  remittedAt          DateTime?            @db.Timestamptz(3)
+  settledAt           DateTime?            @db.Timestamptz(3)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
+  shipment            Shipment             @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  collectedByDriver   DriverProfile?       @relation(fields: [collectedByDriverId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([collectedByDriverId, status])
+}
+
+model ShippingFeeTransaction {
+  id                  String                       @id @default(uuid()) @db.Uuid
+  shipmentId          String                       @unique @db.Uuid
+  payer               ShippingFeePayer
+  expectedAmount      Int
+  collectedAmount     Int?
+  remittedAmount      Int?
+  paidAmount          Int?
+  status              ShippingFeeTransactionStatus @default(PENDING)
+  collectedByDriverId String?                      @db.Uuid
+  remittedByDriverId  String?                      @db.Uuid
+  settledById         String?                      @db.Uuid
+  collectedAt         DateTime?                    @db.Timestamptz(3)
+  remittedAt          DateTime?                    @db.Timestamptz(3)
+  settledAt           DateTime?                    @db.Timestamptz(3)
+  paidAt              DateTime?                    @db.Timestamptz(3)
+  cancelledAt         DateTime?                    @db.Timestamptz(3)
+  createdAt           DateTime                     @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime                     @updatedAt @db.Timestamptz(3)
+  shipment            Shipment                     @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  collectedByDriver   DriverProfile?               @relation("ShippingFeeCollector", fields: [collectedByDriverId], references: [id], onDelete: Restrict)
+  remittedByDriver    DriverProfile?               @relation("ShippingFeeRemitter", fields: [remittedByDriverId], references: [id], onDelete: Restrict)
+  settledBy           User?                        @relation("ShippingFeeSettler", fields: [settledById], references: [id], onDelete: Restrict)
+  disputes            ShippingFeeDispute[]
+  payments            ShippingFeePayment[]
+
+  @@index([status, createdAt])
+  @@index([collectedByDriverId, status])
+  @@index([remittedByDriverId, status])
+}
+
+model ShippingFeePayment {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  shippingFeeTransactionId String                   @db.Uuid
+  clientRequestId          String                   @db.Uuid
+  reference                String                   @unique @db.VarChar(64)
+  provider                 String                   @db.VarChar(32)
+  providerReference        String?                  @db.VarChar(100)
+  payer                    ShippingFeePayer
+  amount                   Int
+  status                   ShippingFeePaymentStatus @default(CREATING)
+  initiatedById            String                   @db.Uuid
+  initiatedAt              DateTime                 @default(now()) @db.Timestamptz(3)
+  providerAcceptedAt       DateTime?                @db.Timestamptz(3)
+  succeededAt              DateTime?                @db.Timestamptz(3)
+  failedAt                 DateTime?                @db.Timestamptz(3)
+  failureCode              String?                  @db.VarChar(100)
+  createdAt                DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime                 @updatedAt @db.Timestamptz(3)
+  shippingFeeTransaction   ShippingFeeTransaction   @relation(fields: [shippingFeeTransactionId], references: [id], onDelete: Restrict)
+  initiatedBy              User                     @relation("ShippingFeePaymentInitiator", fields: [initiatedById], references: [id], onDelete: Restrict)
+  events                   ShippingFeePaymentEvent[]
+
+  @@unique([shippingFeeTransactionId, clientRequestId])
+  @@unique([provider, providerReference])
+  @@index([shippingFeeTransactionId, status])
+  @@index([status, createdAt])
+}
+
+model ShippingFeePaymentEvent {
+  id              String                          @id @default(uuid()) @db.Uuid
+  paymentId       String                          @db.Uuid
+  provider        String                          @db.VarChar(32)
+  providerEventId String                          @db.VarChar(100)
+  payloadDigest   String                          @db.Char(64)
+  type            ShippingFeePaymentEventType
+  amount          Int
+  occurredAt      DateTime                        @db.Timestamptz(3)
+  receivedAt      DateTime                        @default(now()) @db.Timestamptz(3)
+  processedAt     DateTime                        @db.Timestamptz(3)
+  payment         ShippingFeePayment              @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerEventId])
+  @@index([paymentId, receivedAt])
+}
+
+model ShippingFeeDispute {
+  id                       String                       @id @default(uuid()) @db.Uuid
+  shippingFeeTransactionId String                       @db.Uuid
+  fromStatus               ShippingFeeTransactionStatus
+  reason                   String                       @db.VarChar(500)
+  openedById               String                       @db.Uuid
+  openedAt                 DateTime                     @default(now()) @db.Timestamptz(3)
+  resolvedById             String?                      @db.Uuid
+  resolvedAt               DateTime?                    @db.Timestamptz(3)
+  resolutionNote           String?                      @db.VarChar(500)
+  transaction              ShippingFeeTransaction       @relation(fields: [shippingFeeTransactionId], references: [id], onDelete: Restrict)
+  openedBy                 User                         @relation("ShippingFeeDisputeOpener", fields: [openedById], references: [id], onDelete: Restrict)
+  resolvedBy               User?                        @relation("ShippingFeeDisputeResolver", fields: [resolvedById], references: [id], onDelete: Restrict)
+
+  @@index([shippingFeeTransactionId, openedAt])
+}
+
+model WarehouseTransfer {
+  id                      String                  @id @default(uuid()) @db.Uuid
+  transferCode            String                  @unique @db.VarChar(32)
+  shipmentId              String                  @db.Uuid
+  fromWarehouseId         String                  @db.Uuid
+  toWarehouseId           String                  @db.Uuid
+  status                  WarehouseTransferStatus @default(PENDING)
+  note                    String?                 @db.VarChar(500)
+  clientRequestId         String                  @db.Uuid
+  createdById             String                  @db.Uuid
+  dispatchedById          String?                 @db.Uuid
+  dispatchedAt            DateTime?               @db.Timestamptz(3)
+  receivedById            String?                 @db.Uuid
+  receivedAt              DateTime?               @db.Timestamptz(3)
+  cancelledById           String?                 @db.Uuid
+  cancelledAt             DateTime?               @db.Timestamptz(3)
+  createdAt               DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime                @updatedAt @db.Timestamptz(3)
+  shipment                Shipment                @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  fromWarehouse           Warehouse               @relation("TransferOrigin", fields: [fromWarehouseId], references: [id], onDelete: Restrict)
+  toWarehouse             Warehouse               @relation("TransferDestination", fields: [toWarehouseId], references: [id], onDelete: Restrict)
+  createdBy               User                    @relation("TransferCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  dispatchedBy            User?                   @relation("TransferDispatcher", fields: [dispatchedById], references: [id], onDelete: Restrict)
+  receivedBy              User?                   @relation("TransferReceiver", fields: [receivedById], references: [id], onDelete: Restrict)
+  cancelledBy             User?                   @relation("TransferCanceller", fields: [cancelledById], references: [id], onDelete: Restrict)
+  lineHaulTripAssignments LineHaulTripTransfer[]
+
+  @@unique([createdById, clientRequestId])
+  @@index([shipmentId, status])
+  @@index([fromWarehouseId, status])
+  @@index([toWarehouseId, status])
+}
+
+model DriverProfile {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  userId                 String                   @unique @db.Uuid
+  operatingWarehouseId   String?                  @db.Uuid
+  employeeCode           String                   @unique @db.VarChar(32)
+  vehicleType            String                   @db.VarChar(50)
+  vehiclePlate           String                   @db.VarChar(20)
+  capabilities           DriverCapability[]       @default([PICKUP, DELIVERY])
+  status                 DriverStatus             @default(OFFLINE)
+  isOnline               Boolean                  @default(false)
+  isAvailable            Boolean                  @default(false)
+  version                Int                      @default(0)
+  createdAt              DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime                 @updatedAt @db.Timestamptz(3)
+  user                   User                     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  operatingWarehouse     Warehouse?               @relation(fields: [operatingWarehouseId], references: [id], onDelete: Restrict)
+  assignments            DriverAssignment[]
+  deliveryAttempts       DeliveryAttempt[]
+  codCollections         CODTransaction[]
+  shippingFeeCollections ShippingFeeTransaction[] @relation("ShippingFeeCollector")
+  shippingFeeRemittances ShippingFeeTransaction[] @relation("ShippingFeeRemitter")
+  lineHaulTrips          LineHaulTrip[]
+
+  @@index([status, updatedAt])
+  @@index([operatingWarehouseId, status])
+}
+
+model LineHaulVehicle {
+  id                  String                @id @default(uuid()) @db.Uuid
+  vehicleCode         String                @unique @db.VarChar(32)
+  licensePlate        String                @unique @db.VarChar(20)
+  vehicleType         String                @db.VarChar(50)
+  capacityWeightGrams Int?
+  status              LineHaulVehicleStatus @default(AVAILABLE)
+  version             Int                   @default(0)
+  createdAt           DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime              @updatedAt @db.Timestamptz(3)
+  trips               LineHaulTrip[]
+
+  @@index([status, updatedAt])
+}
+
+model LineHaulTrip {
+  id                                 String                 @id @default(uuid()) @db.Uuid
+  tripCode                           String                 @unique @db.VarChar(32)
+  clientRequestId                    String                 @db.Uuid
+  originWarehouseId                  String                 @db.Uuid
+  destinationWarehouseId             String                 @db.Uuid
+  driverId                           String                 @db.Uuid
+  vehicleId                          String                 @db.Uuid
+  status                             LineHaulTripStatus     @default(PLANNED)
+  plannedDepartureAt                 DateTime?              @db.Timestamptz(3)
+  scheduledStartAt                   DateTime?              @db.Timestamptz(3)
+  scheduledEndAt                     DateTime?              @db.Timestamptz(3)
+  plannedDistanceMeters              Int?
+  plannedDurationSeconds             Int?
+  routeMetricMode                    RouteMetricMode?
+  routeProvider                      String?                @db.VarChar(50)
+  routeCalculatedAt                  DateTime?              @db.Timestamptz(3)
+  currentRouteId                     String?                @unique @db.Uuid
+  preparedManifestWeightGrams        Int?
+  preparedVehicleCapacityWeightGrams Int?
+  departedAt                         DateTime?              @db.Timestamptz(3)
+  arrivedAt                          DateTime?              @db.Timestamptz(3)
+  cancelledAt                        DateTime?              @db.Timestamptz(3)
+  cancellationReason                 String?                @db.VarChar(500)
+  createdById                        String                 @db.Uuid
+  cancelledById                      String?                @db.Uuid
+  version                            Int                    @default(0)
+  createdAt                          DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt                          DateTime               @updatedAt @db.Timestamptz(3)
+  originWarehouse                    Warehouse              @relation("LineHaulTripOrigin", fields: [originWarehouseId], references: [id], onDelete: Restrict)
+  destinationWarehouse               Warehouse              @relation("LineHaulTripDestination", fields: [destinationWarehouseId], references: [id], onDelete: Restrict)
+  driver                             DriverProfile          @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  vehicle                            LineHaulVehicle        @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  createdBy                          User                   @relation("LineHaulTripCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  cancelledBy                        User?                  @relation("LineHaulTripCanceller", fields: [cancelledById], references: [id], onDelete: Restrict)
+  transferAssignments                LineHaulTripTransfer[]
+  routes                             LineHaulTripRoute[]    @relation("LineHaulTripRouteHistory")
+  currentRoute                       LineHaulTripRoute?     @relation("CurrentLineHaulTripRoute", fields: [currentRouteId], references: [id], onDelete: Restrict)
+
+  @@unique([createdById, clientRequestId])
+  @@index([status, plannedDepartureAt])
+  @@index([status, scheduledStartAt])
+  @@index([originWarehouseId, status])
+  @@index([destinationWarehouseId, status])
+  @@index([driverId, status])
+  @@index([vehicleId, status])
+}
+
+model LineHaulTripRoute {
+  id                   String                @id @default(uuid()) @db.Uuid
+  tripId               String                @db.Uuid
+  version              Int
+  type                 LineHaulTripRouteType
+  startLatitude        Decimal               @db.Decimal(9, 6)
+  startLongitude       Decimal               @db.Decimal(9, 6)
+  destinationLatitude  Decimal               @db.Decimal(9, 6)
+  destinationLongitude Decimal               @db.Decimal(9, 6)
+  distanceMeters       Int
+  durationSeconds      Int?
+  metricMode           RouteMetricMode
+  provider             String                @db.VarChar(50)
+  geometry             Json?
+  calculatedAt         DateTime              @db.Timestamptz(3)
+  createdById          String?               @db.Uuid
+  createdAt            DateTime              @default(now()) @db.Timestamptz(3)
+  trip                 LineHaulTrip          @relation("LineHaulTripRouteHistory", fields: [tripId], references: [id], onDelete: Restrict)
+  currentForTrip       LineHaulTrip?         @relation("CurrentLineHaulTripRoute")
+  createdBy            User?                 @relation("LineHaulTripRouteCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([tripId, version])
+  @@index([tripId, createdAt])
+}
+
+model LineHaulTripTransfer {
+  id                  String            @id @default(uuid()) @db.Uuid
+  tripId              String            @db.Uuid
+  warehouseTransferId String            @db.Uuid
+  isActive            Boolean           @default(true)
+  assignedById        String            @db.Uuid
+  assignedAt          DateTime          @default(now()) @db.Timestamptz(3)
+  removedById         String?           @db.Uuid
+  removedAt           DateTime?         @db.Timestamptz(3)
+  trip                LineHaulTrip      @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  warehouseTransfer   WarehouseTransfer @relation(fields: [warehouseTransferId], references: [id], onDelete: Restrict)
+  assignedBy          User              @relation("LineHaulTransferAssigner", fields: [assignedById], references: [id], onDelete: Restrict)
+  removedBy           User?             @relation("LineHaulTransferRemover", fields: [removedById], references: [id], onDelete: Restrict)
+
+  @@index([tripId, isActive])
+  @@index([warehouseTransferId, assignedAt])
+}
+
+model DriverAssignment {
+  id               String                 @id @default(uuid()) @db.Uuid
+  shipmentId       String                 @db.Uuid
+  driverId         String                 @db.Uuid
+  type             DriverAssignmentType
+  status           DriverAssignmentStatus @default(PENDING)
+  clientRequestId  String                 @db.Uuid
+  assignedById     String                 @db.Uuid
+  assignedAt       DateTime               @default(now()) @db.Timestamptz(3)
+  acceptedAt       DateTime?              @db.Timestamptz(3)
+  rejectedAt       DateTime?              @db.Timestamptz(3)
+  completedAt      DateTime?              @db.Timestamptz(3)
+  cancelledAt      DateTime?              @db.Timestamptz(3)
+  reason           String?                @db.VarChar(500)
+  shipment         Shipment               @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  driver           DriverProfile          @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  assignedBy       User                   @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: Restrict)
+  proof            ShipmentProof?
+  deliveryAttempts DeliveryAttempt[]
+
+  @@unique([assignedById, clientRequestId])
+  @@index([driverId, status])
+  @@index([driverId, type, assignedAt])
+  @@index([shipmentId, type, status])
+}
+
+model ShipmentProof {
+  id                 String            @id @default(uuid()) @db.Uuid
+  shipmentId         String            @db.Uuid
+  type               ShipmentProofType
+  driverAssignmentId String?           @unique @db.Uuid
+  deliveryAttemptId  String?           @unique @db.Uuid
+  fileUrl            String?           @db.Text
+  note               String?           @db.VarChar(500)
+  receiverName       String?           @db.VarChar(100)
+  latitude           Decimal?          @db.Decimal(9, 6)
+  longitude          Decimal?          @db.Decimal(9, 6)
+  capturedAt         DateTime          @default(now()) @db.Timestamptz(3)
+  createdById        String            @db.Uuid
+  createdAt          DateTime          @default(now()) @db.Timestamptz(3)
+  shipment           Shipment          @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  driverAssignment   DriverAssignment? @relation(fields: [driverAssignmentId], references: [id], onDelete: Restrict)
+  deliveryAttempt    DeliveryAttempt?  @relation(fields: [deliveryAttemptId], references: [id], onDelete: Restrict)
+  createdBy          User              @relation("ProofCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([shipmentId])
+}
+
+model DeliveryAttempt {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  shipmentId         String                 @db.Uuid
+  driverId           String                 @db.Uuid
+  driverAssignmentId String                 @db.Uuid
+  attemptNumber      Int
+  status             DeliveryAttemptStatus  @default(OUT_FOR_DELIVERY)
+  failureReason      DeliveryFailureReason?
+  failureNote        String?                @db.VarChar(500)
+  startedAt          DateTime               @default(now()) @db.Timestamptz(3)
+  completedAt        DateTime?              @db.Timestamptz(3)
+  shipment           Shipment               @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  driver             DriverProfile          @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  driverAssignment   DriverAssignment       @relation(fields: [driverAssignmentId], references: [id], onDelete: Restrict)
+  proof              ShipmentProof?
+
+  @@unique([shipmentId, attemptNumber])
+  @@index([driverId, status])
+  @@index([shipmentId, startedAt])
+}
+
+model Notification {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
+  eventKey       String    @db.VarChar(150)
+  type           String    @db.VarChar(50)
+  title          String    @db.VarChar(150)
+  message        String    @db.VarChar(500)
+  data           Json?     @db.JsonB
+  readAt         DateTime? @db.Timestamptz(3)
+  emailSentAt    DateTime? @db.Timestamptz(3)
+  emailMessageId String?   @db.VarChar(200)
+  emailAttempts  Int       @default(0)
+  emailLastError String?   @db.VarChar(500)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, eventKey])
+  @@index([userId, readAt, createdAt])
+}
+
+model TrackingEvent {
+  id          String             @id @default(uuid()) @db.Uuid
+  shipmentId  String             @db.Uuid
+  status      ShipmentStatus
+  type        String             @db.VarChar(50)
+  title       String             @db.VarChar(150)
+  description String?            @db.VarChar(500)
+  visibility  TrackingVisibility @default(PUBLIC)
+  actorId     String?            @db.Uuid
+  warehouseId String?            @db.Uuid
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  shipment    Shipment           @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  actor       User?              @relation("TrackingEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+  warehouse   Warehouse?         @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@index([shipmentId, createdAt])
+  @@index([warehouseId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  actorRole  UserRole
+  action     String   @db.VarChar(100)
+  entityType String   @db.VarChar(100)
+  entityId   String   @db.VarChar(100)
+  before     Json?    @db.JsonB
+  after      Json?    @db.JsonB
+  metadata   Json?    @db.JsonB
+  ipAddress  String?  @db.VarChar(64)
+  userAgent  String?  @db.VarChar(500)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  actor      User?    @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model CustomerAddress {
+  id            String   @id @default(uuid()) @db.Uuid
+  customerId    String   @db.Uuid
+  label         String   @db.VarChar(50)
+  contactName   String   @db.VarChar(100)
+  phone         String   @db.VarChar(20)
+  streetAddress String   @db.VarChar(255)
+  ward          String   @db.VarChar(100)
+  district      String   @db.VarChar(100)
+  city          String   @db.VarChar(100)
+  latitude      Decimal? @db.Decimal(9, 6)
+  longitude     Decimal? @db.Decimal(9, 6)
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+  customer      User     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([customerId, createdAt])
+  @@index([customerId, isDefault])
+}
+
+model AuthSession {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique @db.Char(64)
+  expiresAt DateTime  @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique @db.Char(64)
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
+}
