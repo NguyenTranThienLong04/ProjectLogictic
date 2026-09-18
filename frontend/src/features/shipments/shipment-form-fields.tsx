@@ -6,9 +6,11 @@ import { SelectField } from '../../components/ui/select-field';
 import type { Address } from '../addresses/address-api';
 import type { ShipmentFormValues } from './shipment-form';
 import { LocationPicker } from '../locations/location-picker';
+import type { LocationAddressContext } from '../locations/location-viewport';
 import { SHIPPING_FEE_PAYER_OPTIONS } from './shipping-fee-payer';
 
 interface ShipmentFormFieldsProps {
+  deliveryAddressContext: LocationAddressContext;
   deliveryLocation?: { latitude: number; longitude: number };
   onDeliveryLocation: (point: { latitude: number; longitude: number }) => void;
   addresses: Address[];
@@ -16,7 +18,7 @@ interface ShipmentFormFieldsProps {
   register: UseFormRegister<ShipmentFormValues>;
 }
 
-export function ShipmentFormFields({ addresses, errors, register, deliveryLocation, onDeliveryLocation }: ShipmentFormFieldsProps) {
+export function ShipmentFormFields({ addresses, errors, register, deliveryLocation, onDeliveryLocation, deliveryAddressContext }: ShipmentFormFieldsProps) {
   return (
     <div className="space-y-6">
       <fieldset className="min-w-0 rounded-surface border border-border bg-surface p-4 shadow-surface sm:p-6">
@@ -100,7 +102,7 @@ export function ShipmentFormFields({ addresses, errors, register, deliveryLocati
             />
           </div>
           <div className="sm:col-span-2">
-            <LocationPicker label="Vị trí giao hàng (tùy chọn)" value={deliveryLocation} onChange={onDeliveryLocation} />
+            <LocationPicker label="Vị trí giao hàng (tùy chọn)" value={deliveryLocation} onChange={onDeliveryLocation} addressContext={deliveryAddressContext} />
           </div>
         </div>
       </fieldset>

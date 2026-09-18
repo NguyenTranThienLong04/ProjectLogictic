@@ -2,6 +2,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useEffect, useRef, useState } from 'react';
 import { hasValidCoordinates } from './driver-task-map-model';
+import { DEFAULT_SELECTED_LOCATION_ZOOM, type LocationViewport } from './location-viewport';
 
 export interface MapMarker {
   id: string;
@@ -25,16 +26,20 @@ export function LocationMap({
   markers,
   polylines = EMPTY_POLYLINES,
   onSelect,
+  initialViewport,
 }: {
   ariaLabel?: string;
   markers: MapMarker[];
   polylines?: MapPolyline[];
   onSelect?: (point: { latitude: number; longitude: number }) => void;
+  initialViewport?: LocationViewport;
 }) {
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
-  const initialSelection = useRef(onSelect ? markers[0] : undefined);
+  const initialSelection = useRef(onSelect ? markers.find(hasValidCoordinates) : undefined);
+  // Snapshot on mount: form rerenders and user selection must never reset the viewport.
+  const openingViewport = useRef(initialViewport);
 
   const selection = useRef(onSelect);
   const [tileState, setTileState] = useState('loading');
@@ -52,8 +57,10 @@ export function LocationMap({
     }).setView(
       initialSelection.current
         ? [initialSelection.current.latitude, initialSelection.current.longitude]
-        : [0, 0],
-      initialSelection.current ? 14 : 2,
+        : openingViewport.current && hasValidCoordinates(openingViewport.current.center)
+          ? [openingViewport.current.center.latitude, openingViewport.current.center.longitude]
+          : [0, 0],
+      initialSelection.current ? DEFAULT_SELECTED_LOCATION_ZOOM : openingViewport.current?.zoom ?? 2,
     );
     const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',

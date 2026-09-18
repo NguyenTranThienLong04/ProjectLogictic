@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { hasValidCoordinates } from './driver-task-map-model';
 import { LocationMap } from './location-map';
+import { resolveAddressViewport, type LocationAddressContext } from './location-viewport';
 
 type Coordinate = { latitude: number; longitude: number };
 
@@ -10,14 +11,17 @@ export function LocationPicker({
   onChange,
   label,
   disabled = false,
+  addressContext,
 }: {
   value?: Coordinate;
   onChange: (value: Coordinate) => void;
   label: string;
   disabled?: boolean;
+  addressContext?: LocationAddressContext;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Coordinate>();
+  const selectedValue = hasValidCoordinates(value) ? value : undefined;
   const select = useCallback((point: Coordinate) => {
     if (hasValidCoordinates(point)) setDraft(point);
   }, []);
@@ -25,18 +29,18 @@ export function LocationPicker({
     <section aria-label={label} className="space-y-3 rounded-control border border-border p-4">
       <p className="font-semibold text-ink">{label}</p>
       <p aria-live="polite" className="text-sm tabular-nums text-muted-foreground">
-        {value ? `${value.latitude.toFixed(6)}, ${value.longitude.toFixed(6)}` : 'Chưa chọn vị trí'}
+        {selectedValue ? `${selectedValue.latitude.toFixed(6)}, ${selectedValue.longitude.toFixed(6)}` : 'Chưa chọn vị trí'}
       </p>
       {!open ? (
         <Button
           disabled={disabled}
           variant="secondary"
           onClick={() => {
-            setDraft(value);
+            setDraft(selectedValue);
             setOpen(true);
           }}
         >
-          {value ? 'Thay đổi vị trí' : 'Chọn vị trí trên bản đồ'}
+          {selectedValue ? 'Thay đổi vị trí' : 'Chọn vị trí trên bản đồ'}
         </Button>
       ) : (
         <>
@@ -46,6 +50,7 @@ export function LocationPicker({
           </p>
           <LocationMap
             ariaLabel={label}
+            initialViewport={resolveAddressViewport(addressContext)}
             markers={draft ? [{ ...draft, id: 'selection', label }] : []}
             onSelect={select}
           />

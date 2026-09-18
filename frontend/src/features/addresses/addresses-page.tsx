@@ -265,6 +265,7 @@ export function AddressesPage() {
                   </div>
                   <FormField error={formState.errors.city?.message} id="address-city" label="Tỉnh / thành phố" {...register('city')} />
                   <LocationPicker key={editing?.id ?? 'new'} label="Vị trí địa chỉ" disabled={saveMutation.isPending}
+                    addressContext={{ street: selectedLocation.streetAddress, ward: selectedLocation.ward, district: selectedLocation.district, city: selectedLocation.city }}
                     value={selectedLocation.latitude !== undefined && selectedLocation.longitude !== undefined ? { latitude: selectedLocation.latitude!, longitude: selectedLocation.longitude! } : undefined}
                     onChange={(point) => { setValue('latitude', point.latitude, { shouldDirty: true }); setValue('longitude', point.longitude, { shouldDirty: true }); }} />
                   <label className="ui-transition flex min-h-12 cursor-pointer items-center gap-3 rounded-control border border-border bg-surface-subtle px-4 py-3 font-medium text-ink transition-colors hover:border-border-strong hover:bg-primary-soft/50" htmlFor="address-default">

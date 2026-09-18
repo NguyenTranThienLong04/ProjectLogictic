@@ -321,6 +321,47 @@ describe('Phase 3 Dispatcher & Pickup Driver flow (e2e)', () => {
       .expect(201);
     const addressId = bodyFrom<{ id: string }>(addressRes).data.id;
 
+    const pickupCoordinate = { latitude: 10.7769, longitude: 106.7009 };
+    const assertSavedCoordinate = async (coordinate: typeof pickupCoordinate) => {
+      const reload = await request(server)
+        .get('/api/v1/addresses')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .expect(200);
+      expect(
+        bodyFrom<Array<{ id: string }>>(reload).data.find((item) => item.id === addressId),
+      ).toMatchObject(coordinate);
+      const stored = await prisma.customerAddress.findUniqueOrThrow({ where: { id: addressId } });
+      expect(Number(stored.latitude)).toBe(coordinate.latitude);
+      expect(Number(stored.longitude)).toBe(coordinate.longitude);
+    };
+    await assertSavedCoordinate(pickupCoordinate);
+    // JSON cannot encode NaN/Infinity as numbers; exercise their string forms
+    // through the HTTP ValidationPipe as well as the numeric DTO unit cases.
+    for (const [field, value] of [
+      ['latitude', -91],
+      ['latitude', 91],
+      ['latitude', 'NaN'],
+      ['latitude', 'Infinity'],
+      ['longitude', -181],
+      ['longitude', 181],
+      ['longitude', 'NaN'],
+      ['longitude', 'Infinity'],
+    ] as const) {
+      await request(server)
+        .patch(`/api/v1/addresses/${addressId}`)
+        .set('Authorization', `Bearer ${customerToken}`)
+        .send({ [field]: value })
+        .expect(400);
+    }
+    await assertSavedCoordinate(pickupCoordinate);
+    const editedCoordinate = { latitude: 10.7771, longitude: 106.7011 };
+    await request(server)
+      .patch(`/api/v1/addresses/${addressId}`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send(editedCoordinate)
+      .expect(200);
+    await assertSavedCoordinate(editedCoordinate);
+
     const shipmentRes = await request(server)
       .post('/api/v1/shipments')
       .set('Authorization', `Bearer ${customerToken}`)
@@ -329,6 +370,8 @@ describe('Phase 3 Dispatcher & Pickup Driver flow (e2e)', () => {
         pickupAddressId: addressId,
         deliveryAddress: {
           contactName: 'Receiver Phase 3',
+          latitude: 18.090164,
+          longitude: 24.769688,
           phone: '0988776655',
           streetAddress: '200 Hai Bà Trưng',
           ward: 'Tân Định',
@@ -350,6 +393,25 @@ describe('Phase 3 Dispatcher & Pickup Driver flow (e2e)', () => {
     const shipment = bodyFrom<ShipmentPayload>(shipmentRes).data;
     expect(shipment.status).toBe(ShipmentStatus.PENDING);
 
+    const storedShipment = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+    expect(storedShipment.pickupSnapshot).toMatchObject(editedCoordinate);
+    expect(storedShipment.deliverySnapshot).toMatchObject({
+      latitude: 18.090164,
+      longitude: 24.769688,
+    });
+    // A later address edit must not move the historical pickup or ranking target.
+    const laterCoordinate = { latitude: 21.0285, longitude: 105.8542 };
+    await request(server)
+      .patch(`/api/v1/addresses/${addressId}`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send(laterCoordinate)
+      .expect(200);
+    await assertSavedCoordinate(laterCoordinate);
+    const reloadedShipment = await prisma.shipment.findUniqueOrThrow({
+      where: { id: shipment.id },
+    });
+    expect(reloadedShipment.pickupSnapshot).toEqual(storedShipment.pickupSnapshot);
+
     // 6. Dispatcher confirms shipment -> AWAITING_PICKUP_ASSIGNMENT
     const confirmRes = await request(server)
       .post(`/api/v1/dispatcher/shipments/${shipment.id}/confirm`)
@@ -369,6 +431,19 @@ describe('Phase 3 Dispatcher & Pickup Driver flow (e2e)', () => {
     }
 
     // 7. Dispatcher assigns driver1 -> PICKUP_ASSIGNED
+    const candidatesResponse = await request(server)
+      .get(`/api/v1/dispatcher/shipments/${shipment.id}/pickup-candidates`)
+      .set('Authorization', `Bearer ${dispatcherToken}`)
+      .expect(200);
+    const candidates = bodyFrom<{
+      candidates: Array<{ id: string; distanceMeters: number }>;
+    }>(candidatesResponse).data.candidates;
+    expect(candidates.map((candidate) => candidate.id)).toEqual([
+      driver1Profile.id,
+      driver2Profile.id,
+    ]);
+    expect(candidates[0].distanceMeters).toBeLessThan(100);
+    expect(candidates[0].distanceMeters).toBeLessThan(candidates[1].distanceMeters);
     const assignClientReqId = crypto.randomUUID();
     const assignRes = await request(server)
       .post(`/api/v1/dispatcher/shipments/${shipment.id}/pickup-assignments`)
@@ -380,6 +455,9 @@ describe('Phase 3 Dispatcher & Pickup Driver flow (e2e)', () => {
       .expect(201);
     const assignment1 = bodyFrom<AssignmentPayload>(assignRes).data;
     expect(assignment1.status).toBe('PENDING');
+    expect((await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } })).status).toBe(
+      ShipmentStatus.PICKUP_ASSIGNED,
+    );
 
     // 8. Dispatcher reassigns to driver2 while active -> assignment1 CANCELLED, assignment2 created
     const reassignClientReqId = crypto.randomUUID();

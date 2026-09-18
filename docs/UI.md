@@ -27,6 +27,8 @@ SearchFilter · NotificationBell · Timeline · Map
 
 ### LocationPicker
 
+- Viewport khi mở: **saved coordinate hợp lệ (zoom 16) → address/city focus (zoom 12) → Việt Nam `[16, 106]` (zoom 6)**. Chưa có geocoder: chỉ focus gần TP.HCM/Hà Nội theo city alias, không suy diễn vị trí số nhà/phường/quận. Form Saved Address/Create Shipment/Báo giá truyền `street`, `ward`, `district`, `city` hiện tại.
+- **Viewport center != selected coordinate**: focus không tạo marker, không ghi lat/lng, không bật Confirm khi chưa chọn điểm. Initial coordinate phải finite/đủ cặp/trong range; invalid thì fallback. Chỉ áp dụng viewport khi mount mỗi lần mở picker; pan/zoom/click/drag hoặc form rerender không tự recenter. Mở lại ưu tiên tọa độ đã xác nhận; Hủy giữ nguyên giá trị cũ.
 - `features/locations/location-picker.tsx` là shared/reusable picker của Customer Address và form dùng chung Create Shipment/Báo giá. Reuse `LocationMap` và Leaflet/tile setup hiện có, không khởi tạo Leaflet riêng trong từng form.
 - Interaction canonical: **Chọn vị trí trên bản đồ → click map → marker → drag chỉnh vị trí → Xác nhận vị trí → readonly selected coordinate → Thay đổi vị trí**. Hủy giữ giá trị đã xác nhận. Main form không có trường latitude/longitude chỉnh tay; delivery location vẫn tùy chọn theo DOMAIN.
 - Dùng semantic tokens, layout responsive, loading/error text và retry bằng đóng/mở picker. Keyboard: focus bản đồ, phím mũi tên pan, Enter chọn tâm; click map là phương án thay thế drag. Không dùng chuyển động bản đồ bắt buộc; giữ label, focus và trạng thái disabled của shared Button.

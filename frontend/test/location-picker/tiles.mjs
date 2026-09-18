@@ -56,6 +56,13 @@ try {
       });
     }
     await page.goto(url);
+    if (mode === 'live') {
+      await page.getByRole('button', { name: 'Chọn vị trí trên bản đồ' }).click();
+      await page.locator('.leaflet-container').click({ position: { x: 100, y: 100 } });
+      await page.getByRole('button', { name: 'Hủy', exact: true }).click();
+      await expect(page.locator('output')).toBeEmpty();
+      await expect(page.getByText('Chưa chọn vị trí', { exact: true })).toBeVisible();
+    }
     await page.getByRole('button', { name: 'Chọn vị trí trên bản đồ' }).click();
     const map = page.locator('.leaflet-container');
     if (mode === 'all-fail') {
@@ -79,11 +86,22 @@ try {
     await page.mouse.move(box.x + 50, box.y + 45, { steps: 6 });
     await page.mouse.up();
     await expect(draft).not.toHaveText(before);
+    const [latitude, longitude] = (await draft.textContent()).split(',').map(Number);
+    assert(Number.isFinite(latitude) && latitude >= -90 && latitude <= 90);
+    assert(Number.isFinite(longitude) && longitude >= -180 && longitude <= 180);
     await page.getByRole('button', { name: 'Xác nhận vị trí' }).click();
     const coordinate = JSON.parse(await page.locator('output').textContent());
+    assert.deepEqual(coordinate, { latitude, longitude });
+    await expect(map).toHaveCount(0);
+    await expect(page.locator('section > p[aria-live]')).toHaveText(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+    await expect(page.locator('input')).toHaveCount(0);
     await page.getByRole('button', { name: 'Thay đổi vị trí' }).click();
     await expect(marker).toBeVisible();
     await expect(draft).toHaveText(`${coordinate.latitude.toFixed(6)}, ${coordinate.longitude.toFixed(6)}`);
+    const mapBox = await map.boundingBox();
+    const reopenedMarker = await marker.boundingBox();
+    assert(Math.abs(reopenedMarker.x + reopenedMarker.width / 2 - (mapBox.x + mapBox.width / 2)) <= 2);
+    assert(Math.abs(reopenedMarker.y + reopenedMarker.height / 2 - (mapBox.y + mapBox.height / 2)) <= 2);
     if (mode === 'all-fail') {
       await expect(page.getByText('Không tải được bản đồ.', { exact: false })).toBeVisible();
       failAll = false;
@@ -96,6 +114,13 @@ try {
     await map.click({ position: { x: 60, y: 60 } });
     await page.getByRole('button', { name: 'Hủy', exact: true }).click();
     assert.deepEqual(JSON.parse(await page.locator('output').textContent()), coordinate);
+    await page.getByRole('button', { name: 'Thay đổi vị trí' }).click();
+    await map.click({ position: { x: 90, y: 90 } });
+    const [newLatitude, newLongitude] = (await draft.textContent()).split(',').map(Number);
+    await page.getByRole('button', { name: 'Xác nhận vị trí' }).click();
+    const changed = JSON.parse(await page.locator('output').textContent());
+    assert.deepEqual(changed, { latitude: newLatitude, longitude: newLongitude });
+    assert.notDeepEqual(changed, coordinate);
     console.log(`PASS ${offline ? 'TEST IMAGE' : 'NETWORK'} ${mode}: tile state, click, drag updates coordinate, confirm, reopen, cancel`);
   }
   assert.equal(violations.length, 0);
