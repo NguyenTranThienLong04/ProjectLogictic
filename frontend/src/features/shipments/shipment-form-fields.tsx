@@ -1,24 +1,37 @@
-import type { FieldErrors, UseFormRegister } from 'react-hook-form';
+import { useWatch, type Control, type FieldErrors, type UseFormRegister, type UseFormSetValue } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { EmptyState } from '../../components/ui/empty-state';
 import { FormField } from '../../components/ui/form-field';
 import { SelectField } from '../../components/ui/select-field';
 import type { Address } from '../addresses/address-api';
-import type { ShipmentFormValues } from './shipment-form';
+import { getDeliveryAddressContext, type ShipmentFormValues } from './shipment-form';
 import { LocationPicker } from '../locations/location-picker';
-import type { LocationAddressContext } from '../locations/location-viewport';
+import { AdministrativeAddressFields } from '../addresses/administrative-address-fields';
 import { SHIPPING_FEE_PAYER_OPTIONS } from './shipping-fee-payer';
 
 interface ShipmentFormFieldsProps {
-  deliveryAddressContext: LocationAddressContext;
-  deliveryLocation?: { latitude: number; longitude: number };
-  onDeliveryLocation: (point: { latitude: number; longitude: number }) => void;
+  control: Control<ShipmentFormValues>;
+  setValue: UseFormSetValue<ShipmentFormValues>;
   addresses: Address[];
   errors: FieldErrors<ShipmentFormValues>;
   register: UseFormRegister<ShipmentFormValues>;
 }
 
-export function ShipmentFormFields({ addresses, errors, register, deliveryLocation, onDeliveryLocation, deliveryAddressContext }: ShipmentFormFieldsProps) {
+export function ShipmentFormFields({ addresses, errors, register, control, setValue }: ShipmentFormFieldsProps) {
+  const values = useWatch({ control });
+  const deliveryAddressContext = getDeliveryAddressContext(values);
+  const deliveryLocation = values.deliveryLatitude !== undefined && values.deliveryLongitude !== undefined
+    ? { latitude: values.deliveryLatitude, longitude: values.deliveryLongitude } : undefined;
+  const onDeliveryAddress = (address: { city: string; ward: string; district: string }) => {
+    setValue('deliveryCity', address.city, { shouldDirty: true, shouldValidate: true });
+    setValue('deliveryWard', address.ward, { shouldDirty: true, shouldValidate: true });
+    setValue('deliveryDistrict', address.district, { shouldDirty: true });
+  };
+  const onDeliveryLocation = (point: { latitude: number; longitude: number }, fingerprint: string) => {
+    setValue('deliveryLatitude', point.latitude, { shouldDirty: true });
+    setValue('deliveryLongitude', point.longitude, { shouldDirty: true });
+    setValue('confirmedAddressFingerprint', fingerprint, { shouldDirty: true, shouldValidate: true });
+  };
   return (
     <div className="space-y-6">
       <fieldset className="min-w-0 rounded-surface border border-border bg-surface p-4 shadow-surface sm:p-6">
@@ -81,28 +94,12 @@ export function ShipmentFormFields({ addresses, errors, register, deliveryLocati
               {...register('deliveryStreetAddress')}
             />
           </div>
-          <FormField
-            error={errors.deliveryWard?.message}
-            id="delivery-ward"
-            label="Phường / xã"
-            {...register('deliveryWard')}
-          />
-          <FormField
-            error={errors.deliveryDistrict?.message}
-            id="delivery-district"
-            label="Quận / huyện"
-            {...register('deliveryDistrict')}
-          />
           <div className="sm:col-span-2">
-            <FormField
-              error={errors.deliveryCity?.message}
-              id="delivery-city"
-              label="Tỉnh / thành phố"
-              {...register('deliveryCity')}
-            />
+            <AdministrativeAddressFields city={deliveryAddressContext.city} ward={deliveryAddressContext.ward}
+              cityError={errors.deliveryCity?.message} wardError={errors.deliveryWard?.message} onChange={onDeliveryAddress} />
           </div>
           <div className="sm:col-span-2">
-            <LocationPicker label="Vị trí giao hàng (tùy chọn)" value={deliveryLocation} onChange={onDeliveryLocation} addressContext={deliveryAddressContext} />
+            <LocationPicker label="Vị trí giao hàng (tùy chọn)" value={deliveryLocation} onChange={onDeliveryLocation} addressContext={deliveryAddressContext} confirmedAddressFingerprint={values.confirmedAddressFingerprint} />
           </div>
         </div>
       </fieldset>

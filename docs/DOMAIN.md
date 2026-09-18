@@ -4,6 +4,7 @@
 
 - **User**: id, email, phone, passwordHash, fullName, role, isActive, timestamps
 - **CustomerAddress**: id, customerId FK, label, contactName, phone, address, ward, district, city, lat/lng, isDefault
+- Address compatibility (2026-09-18): `district` vẫn là string trong CustomerAddress/API và address snapshots; `''` biểu thị địa chỉ hai cấp không có district. DTO CreateAddress/QuoteAddress chấp nhận chuỗi rỗng, tối đa 100 ký tự; không bỏ cột/migration/backfill, không sửa snapshot cũ. UI mới dùng province → ward; legacy district giữ để hiển thị, không làm hierarchy canonical. Không thay đổi geo persistence, pricing hay assignment policy.
 - **DriverProfile**: id, userId FK unique, operatingWarehouseId FK?, employeeCode unique, vehicleType, vehiclePlate, capabilities (`PICKUP|DELIVERY|LINE_HAUL`[]), status (`OFFLINE|AVAILABLE|BUSY|SUSPENDED`), isOnline, isAvailable
 - **Warehouse**: id, code unique, name, address, lat/lng, isActive
 - **Shipment**: id, trackingCode unique, customerId FK, senderSnapshot, receiverSnapshot, pickupSnapshot, deliverySnapshot, packageSnapshot, pricingSnapshot, codAmount, totalFee, shippingFeePayer (`SENDER|RECEIVER`), status, currentWarehouseId FK?, timestamps (createdAt/confirmedAt/pickedUpAt/deliveredAt/cancelledAt), version. Snapshot dùng JSONB nếu thực sự immutable; quan hệ chính vẫn relational.

@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { Address } from '../addresses/address-api';
 import type { QuoteInput } from '../pricing/pricing-api';
 import type { AddressSnapshot } from './shipment-types';
+import { getConfirmedCoordinate, type LocationAddressContext } from '../addresses/address-location-model.ts';
+import { isCanonicalAddress } from '../addresses/administrative-model.ts';
 
 const phonePattern = /^\+?[0-9][0-9\s-]{7,18}[0-9]$/;
 
@@ -12,7 +14,8 @@ export const shipmentFormSchema = z
     deliveryPhone: z.string().trim().regex(phonePattern, 'Số điện thoại không đúng định dạng'),
     deliveryStreetAddress: z.string().trim().min(3, 'Nhập số nhà, tên đường').max(255),
     deliveryWard: z.string().trim().min(2, 'Nhập phường/xã').max(100),
-    deliveryDistrict: z.string().trim().min(2, 'Nhập quận/huyện').max(100),
+    deliveryDistrict: z.string().trim().max(100),
+    confirmedAddressFingerprint: z.string().optional(),
     deliveryCity: z.string().trim().min(2, 'Nhập tỉnh/thành phố').max(100),
     deliveryLatitude: z
       .number()
@@ -36,6 +39,9 @@ export const shipmentFormSchema = z
     }),
   })
   .superRefine((values, context) => {
+    if (!isCanonicalAddress(values.deliveryCity, values.deliveryWard)) {
+      context.addIssue({ code: 'custom', message: 'Chọn phường/xã thuộc tỉnh/thành hiện tại', path: ['deliveryWard'] });
+    }
     const hasLatitude = values.deliveryLatitude !== undefined;
     const hasLongitude = values.deliveryLongitude !== undefined;
     if (hasLatitude === hasLongitude) return;
@@ -90,6 +96,12 @@ export function addressToSnapshot(address: Address): AddressSnapshot {
 }
 
 export function deliverySnapshot(values: ShipmentFormValues): AddressSnapshot {
+  const coordinate = getConfirmedCoordinate(
+    values.deliveryLatitude !== undefined && values.deliveryLongitude !== undefined
+      ? { latitude: values.deliveryLatitude, longitude: values.deliveryLongitude } : undefined,
+    values.confirmedAddressFingerprint,
+    getDeliveryAddressContext(values),
+  );
   return {
     contactName: values.deliveryContactName.trim(),
     phone: values.deliveryPhone.trim(),
@@ -97,10 +109,12 @@ export function deliverySnapshot(values: ShipmentFormValues): AddressSnapshot {
     ward: values.deliveryWard.trim(),
     district: values.deliveryDistrict.trim(),
     city: values.deliveryCity.trim(),
-    ...(values.deliveryLatitude !== undefined && values.deliveryLongitude !== undefined
-      ? { latitude: values.deliveryLatitude, longitude: values.deliveryLongitude }
-      : {}),
+    ...coordinate,
   };
+}
+
+export function getDeliveryAddressContext(values: Partial<ShipmentFormValues>): LocationAddressContext {
+  return { street: values.deliveryStreetAddress, ward: values.deliveryWard, district: values.deliveryDistrict, city: values.deliveryCity };
 }
 
 export function parseOptionalCoordinateInput(value: unknown): number | undefined {
@@ -131,6 +145,7 @@ export function quoteSignature(values: Partial<ShipmentFormValues>): string {
     deliveryCity: values.deliveryCity,
     deliveryLatitude: values.deliveryLatitude,
     deliveryLongitude: values.deliveryLongitude,
+    confirmedAddressFingerprint: values.confirmedAddressFingerprint,
     description: values.description,
     packageType: values.packageType,
     weightGrams: values.weightGrams,

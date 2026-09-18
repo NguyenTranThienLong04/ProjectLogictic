@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { Button } from '../../components/ui/button';
 import { EmptyState } from '../../components/ui/empty-state';
 import { ErrorState } from '../../components/ui/error-state';
@@ -27,7 +27,6 @@ export function QuotePage() {
     mode: 'onBlur',
     defaultValues: shipmentFormDefaults,
   });
-  const selectedLocation = useWatch({ control });
   const quoteMutation = useMutation({ mutationFn: getQuote });
   const submit = handleSubmit((values) => {
     const pickup = addressesQuery.data?.find((address) => address.id === values.pickupAddressId);
@@ -57,9 +56,7 @@ export function QuotePage() {
           <form className="mt-6 grid min-w-0 gap-6 lg:mt-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start" noValidate onSubmit={submit}>
             <div className="min-w-0">
               <ShipmentFormFields
-                deliveryAddressContext={{ street: selectedLocation.deliveryStreetAddress, ward: selectedLocation.deliveryWard, district: selectedLocation.deliveryDistrict, city: selectedLocation.deliveryCity }}
-                deliveryLocation={selectedLocation.deliveryLatitude !== undefined && selectedLocation.deliveryLongitude !== undefined ? { latitude: selectedLocation.deliveryLatitude!, longitude: selectedLocation.deliveryLongitude! } : undefined}
-                onDeliveryLocation={(point) => { setValue('deliveryLatitude', point.latitude, { shouldDirty: true, shouldValidate: true }); setValue('deliveryLongitude', point.longitude, { shouldDirty: true, shouldValidate: true }); }}
+                control={control} setValue={setValue}
                 addresses={addressesQuery.data ?? []} errors={formState.errors} register={register} />
               <div className="mt-4">
                 <ErrorSummary message={quoteMutation.isError ? getApiErrorMessage(quoteMutation.error) : undefined} />

@@ -3,31 +3,41 @@ import { Button } from '../../components/ui/button';
 import { hasValidCoordinates } from './driver-task-map-model';
 import { LocationMap } from './location-map';
 import { resolveAddressViewport, type LocationAddressContext } from './location-viewport';
+import { getAddressFingerprint, getConfirmedCoordinate, isLocationStale, STALE_LOCATION_MESSAGE, type Coordinate } from '../addresses/address-location-model';
 
-type Coordinate = { latitude: number; longitude: number };
+type LocationPickerProps = {
+  value?: Coordinate;
+  confirmedAddressFingerprint?: string;
+  onChange: (value: Coordinate, fingerprint: string) => void;
+  label: string;
+  disabled?: boolean;
+  addressContext?: LocationAddressContext;
+};
 
-export function LocationPicker({
+export function LocationPicker(props: LocationPickerProps) {
+  // A changed address also discards an unconfirmed draft from an open map.
+  return <LocationPickerSession key={getAddressFingerprint(props.addressContext ?? {})} {...props} />;
+}
+
+function LocationPickerSession({
   value,
   onChange,
   label,
   disabled = false,
-  addressContext,
-}: {
-  value?: Coordinate;
-  onChange: (value: Coordinate) => void;
-  label: string;
-  disabled?: boolean;
-  addressContext?: LocationAddressContext;
-}) {
+  addressContext = {},
+  confirmedAddressFingerprint,
+}: LocationPickerProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Coordinate>();
-  const selectedValue = hasValidCoordinates(value) ? value : undefined;
+  const selectedValue = getConfirmedCoordinate(value, confirmedAddressFingerprint, addressContext);
+  const stale = isLocationStale(confirmedAddressFingerprint, addressContext);
   const select = useCallback((point: Coordinate) => {
     if (hasValidCoordinates(point)) setDraft(point);
   }, []);
   return (
     <section aria-label={label} className="space-y-3 rounded-control border border-border p-4">
       <p className="font-semibold text-ink">{label}</p>
+      {stale && <p role="alert" className="text-sm font-medium text-warning">{STALE_LOCATION_MESSAGE}</p>}
       <p aria-live="polite" className="text-sm tabular-nums text-muted-foreground">
         {selectedValue ? `${selectedValue.latitude.toFixed(6)}, ${selectedValue.longitude.toFixed(6)}` : 'Chưa chọn vị trí'}
       </p>
@@ -64,7 +74,7 @@ export function LocationPicker({
               disabled={disabled || !draft}
               onClick={() => {
                 if (draft) {
-                  onChange(draft);
+                  onChange(draft, getAddressFingerprint(addressContext));
                   setOpen(false);
                 }
               }}

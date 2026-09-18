@@ -3,6 +3,14 @@ import { validate } from 'class-validator';
 import { CreateAddressDto } from './create-address.dto.js';
 
 describe('Saved address coordinate validation', () => {
+  it.each(['', 'Quận 1'])('accepts current/legacy district %j', async (district) => {
+    const errors = await validate(plainToInstance(CreateAddressDto, { district }));
+    expect(errors.some((error) => error.property === 'district')).toBe(false);
+  });
+  it.each([null, 123, 'x'.repeat(101)])('rejects invalid district %j', async (district) => {
+    const errors = await validate(plainToInstance(CreateAddressDto, { district }));
+    expect(errors.some((error) => error.property === 'district')).toBe(true);
+  });
   it.each([
     ['latitude', -91],
     ['latitude', 91],

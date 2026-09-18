@@ -44,9 +44,10 @@ try {
   for (const size of [{ width: 375, height: 812 }, { width: 812, height: 375 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(size);
     for (const [params, expected, level] of [
-      [{ city: 'Ho Chi Minh City' }, [10.7769, 106.7009], 12],
-      [{ city: 'TP. Hồ Chí Minh' }, [10.7769, 106.7009], 12],
-      [{ city: 'Hà Nội' }, [21.0285, 105.8542], 12],
+      [{ city: 'Ho Chi Minh City' }, [10.993, 106.638], 12],
+      [{ city: 'TP. Hồ Chí Minh' }, [10.993, 106.638], 12],
+      [{ city: 'Hà Nội' }, [21, 105.698], 12],
+      [{ city: 'Hồ Chí Minh', ward: 'Bến Thành' }, [10.77, 106.695], 15],
       [{}, [16, 106], 6],
       [{ city: 'Unknown' }, [16, 106], 6],
     ]) {
@@ -63,10 +64,13 @@ try {
     await open({ lat: '21.0285', lng: '105.8542', city: 'Ho Chi Minh City' });
     await zoom(16);
     await expect(marker).toHaveCount(1);
-    const mapBox = await map.boundingBox();
-    const markerBox = await marker.boundingBox();
-    assert(Math.abs(markerBox.x + markerBox.width / 2 - mapBox.x - mapBox.width / 2) < 2);
-    assert(Math.abs(markerBox.y + markerBox.height / 2 - mapBox.y - mapBox.height / 2) < 2);
+    // Read both rectangles together: tile-status text can settle between two tool calls.
+    await expect.poll(() => page.evaluate(() => {
+      const mapBox = document.querySelector('.leaflet-container').getBoundingClientRect();
+      const markerBox = document.querySelector('.leaflet-marker-draggable').getBoundingClientRect();
+      return Math.max(Math.abs(markerBox.x + markerBox.width / 2 - mapBox.x - mapBox.width / 2),
+        Math.abs(markerBox.y + markerBox.height / 2 - mapBox.y - mapBox.height / 2));
+    })).toBeLessThan(2);
     near(await center(), [21.0285, 105.8542]);
     await map.click({ position: { x: 100, y: 100 } });
     await expect(confirm).toBeEnabled();
@@ -92,7 +96,7 @@ try {
     await zoom(17);
     const panned = await center();
     assert.notDeepEqual(panned, dragged);
-    await page.getByRole('textbox', { name: 'Thành phố' }).fill('Hà Nội');
+    await page.getByRole('textbox', { name: 'Thành phố' }).fill(' ho chi minh city ');
     near(await center(), panned);
     await zoom(17);
     await page.getByRole('button', { name: 'Hủy', exact: true }).click();
@@ -106,7 +110,7 @@ try {
     await expect(confirm).toBeDisabled();
     await expect(marker).toHaveCount(0);
     await zoom(12);
-    near(await center(), [10.7769, 106.7009]);
+    near(await center(), [10.993, 106.638]);
   }
   await open({ lat: 'Infinity', lng: '0' });
   await zoom(6);

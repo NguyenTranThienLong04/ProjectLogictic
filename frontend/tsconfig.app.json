@@ -13,6 +13,7 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
@@ -23,4 +24,3 @@
   },
   "include": ["src"]
 }
-

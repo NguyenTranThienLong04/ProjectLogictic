@@ -40,10 +40,14 @@ export class CreateAddressDto {
   @Matches(/\S/)
   ward!: string;
 
-  @ApiProperty({ example: 'Quận 1', minLength: 2, maxLength: 100 })
+  @ApiProperty({
+    example: '',
+    minLength: 0,
+    maxLength: 100,
+    description: 'Legacy district; empty for two-level addresses',
+  })
   @IsString()
-  @Length(2, 100)
-  @Matches(/\S/)
+  @Length(0, 100)
   district!: string;
 
   @ApiProperty({ example: 'Hồ Chí Minh', minLength: 2, maxLength: 100 })

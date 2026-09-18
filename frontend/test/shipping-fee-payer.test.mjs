@@ -16,7 +16,7 @@ const validForm = {
   deliveryContactName: 'Người nhận',
   deliveryPhone: '0987654321',
   deliveryStreetAddress: '2 Tràng Tiền',
-  deliveryWard: 'Tràng Tiền',
+  deliveryWard: 'Hoàn Kiếm',
   deliveryDistrict: 'Hoàn Kiếm',
   deliveryCity: 'Hà Nội',
   description: 'Kiện hàng',

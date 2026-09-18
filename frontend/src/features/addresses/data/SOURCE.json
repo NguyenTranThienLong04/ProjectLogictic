@@ -1,0 +1,18 @@
+{
+  "source": "https://github.com/open-admin-data/vietnam-administrative-divisions",
+  "revision": "54cdb052284b02e75dfaa44089ca383aa12c57db",
+  "sourceUpdated": "2026-09-08",
+  "vendoredOn": "2026-09-18",
+  "administrativeBasis": "19/2025/QD-TTg (effective 2025-07-01)",
+  "crossCheck": "https://raw.githubusercontent.com/ThangLeQuoc/vietnamese-provinces-database/78594ea643d5fdebd640ea3889ea91f84b9463ae/json/vn_only_simplified_json_generated_data_vn_units.json",
+  "referenceSha256": "e10d713fad54145836a2d9cc3d5d3c3c81a751c00f1b172ef67bb83c89a54589",
+  "sha256": {
+    "province": "c41793e6acc321d7253e004fc87659c57a70df3893f957df4821dc02092f12e9",
+    "ward": "66ceabf7d42a656c375e37b16f309ce83376fbc3d35f01309811373b916e2771"
+  },
+  "outputSha256": "860c30d24f8421cf4998013c48d1ca20847bdc4f6564a6c3a63e7fddeda02666",
+  "counts": {
+    "provinces": 34,
+    "wards": 3321
+  }
+}

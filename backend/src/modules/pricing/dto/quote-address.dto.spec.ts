@@ -12,6 +12,15 @@ const validAddress = {
 };
 
 describe('QuoteAddressDto coordinates', () => {
+  it.each(['', 'Quận 1'])('accepts current/legacy district %j', async (district) => {
+    await expect(
+      validate(plainToInstance(QuoteAddressDto, { ...validAddress, district })),
+    ).resolves.toHaveLength(0);
+  });
+  it.each([null, 123, 'x'.repeat(101)])('rejects invalid district %j', async (district) => {
+    const errors = await validate(plainToInstance(QuoteAddressDto, { ...validAddress, district }));
+    expect(errors.some((error) => error.property === 'district')).toBe(true);
+  });
   it('accepts omitted optional delivery coordinates', async () => {
     await expect(validate(plainToInstance(QuoteAddressDto, validAddress))).resolves.toHaveLength(0);
   });

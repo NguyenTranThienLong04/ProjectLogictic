@@ -3,7 +3,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
-import { z } from 'zod';
+import { addressSchema, addressFormInput, emptyAddressForm as emptyForm, type AddressFormValues } from './address-form';
+import { getAddressFingerprint, savedAddressContext } from './address-location-model';
+import { AdministrativeAddressFields } from './administrative-address-fields';
+import { hasValidCoordinates } from '../locations/driver-task-map-model';
 import { Button } from '../../components/ui/button';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { EmptyState } from '../../components/ui/empty-state';
@@ -22,32 +25,6 @@ import {
   type Address,
   type AddressInput,
 } from './address-api';
-
-const phonePattern = /^\+?[0-9][0-9\s-]{7,18}[0-9]$/;
-const addressSchema = z.object({
-  label: z.string().trim().min(1, 'Nhập tên gợi nhớ').max(50, 'Tối đa 50 ký tự'),
-  contactName: z.string().trim().min(2, 'Tên liên hệ cần ít nhất 2 ký tự').max(100),
-  phone: z.string().trim().regex(phonePattern, 'Số điện thoại không đúng định dạng'),
-  streetAddress: z.string().trim().min(3, 'Địa chỉ cần ít nhất 3 ký tự').max(255),
-  ward: z.string().trim().min(2, 'Nhập phường/xã').max(100),
-  district: z.string().trim().min(2, 'Nhập quận/huyện').max(100),
-  city: z.string().trim().min(2, 'Nhập tỉnh/thành phố').max(100),
-  latitude: z.number().min(-90).max(90).optional(),
-  longitude: z.number().min(-180).max(180).optional(),
-  isDefault: z.boolean(),
-});
-type AddressFormValues = z.infer<typeof addressSchema>;
-
-const emptyForm: AddressFormValues = {
-  label: '',
-  contactName: '',
-  phone: '',
-  streetAddress: '',
-  ward: '',
-  district: '',
-  city: '',
-  isDefault: false,
-};
 
 export function AddressesPage() {
   const queryClient = useQueryClient();
@@ -112,6 +89,8 @@ export function AddressesPage() {
       city: address.city,
       latitude: address.latitude ?? undefined,
       longitude: address.longitude ?? undefined,
+      confirmedAddressFingerprint: hasValidCoordinates(address) ? getAddressFingerprint(savedAddressContext(address)) : undefined,
+      originalAddressFingerprint: getAddressFingerprint(savedAddressContext(address)),
       isDefault: address.isDefault,
     });
     setFormOpen(true);
@@ -123,7 +102,7 @@ export function AddressesPage() {
   };
   const submit = handleSubmit((values) => {
     setSuccessMessage(undefined);
-    saveMutation.mutate(values);
+    saveMutation.mutate(addressFormInput(values));
   });
 
   if (addressesQuery.isPending) return <LoadingState label="Đang tải sổ địa chỉ" />;
@@ -188,7 +167,7 @@ export function AddressesPage() {
                             {address.contactName} · {address.phone}
                           </p>
                           <p className="mt-1.5 wrap-anywhere text-sm leading-6 text-muted-foreground">
-                            {address.streetAddress}, {address.ward}, {address.district}, {address.city}
+                            {[address.streetAddress, address.ward, address.district, address.city].filter(Boolean).join(', ')}
                           </p>
                         </div>
                       </div>
@@ -259,15 +238,24 @@ export function AddressesPage() {
                   <FormField autoComplete="name" error={formState.errors.contactName?.message} id="address-contact" label="Tên người liên hệ" {...register('contactName')} />
                   <FormField autoComplete="tel" error={formState.errors.phone?.message} id="address-phone" label="Số điện thoại" type="tel" {...register('phone')} />
                   <FormField autoComplete="street-address" error={formState.errors.streetAddress?.message} id="address-street" label="Số nhà, tên đường" {...register('streetAddress')} />
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    <FormField error={formState.errors.ward?.message} id="address-ward" label="Phường / xã" {...register('ward')} />
-                    <FormField error={formState.errors.district?.message} id="address-district" label="Quận / huyện" {...register('district')} />
-                  </div>
-                  <FormField error={formState.errors.city?.message} id="address-city" label="Tỉnh / thành phố" {...register('city')} />
+                  <AdministrativeAddressFields city={selectedLocation.city} ward={selectedLocation.ward}
+                    cityError={formState.errors.city?.message} wardError={formState.errors.ward?.message} disabled={saveMutation.isPending}
+                    onChange={(address) => {
+                      setValue('city', address.city, { shouldDirty: true, shouldValidate: true });
+                      setValue('ward', address.ward, { shouldDirty: true, shouldValidate: true });
+                      setValue('district', address.district, { shouldDirty: true });
+                    }} />
+                  {selectedLocation.district && <p className="text-sm text-muted-foreground">Quận / huyện (địa chỉ cũ): {selectedLocation.district}</p>}
                   <LocationPicker key={editing?.id ?? 'new'} label="Vị trí địa chỉ" disabled={saveMutation.isPending}
-                    addressContext={{ street: selectedLocation.streetAddress, ward: selectedLocation.ward, district: selectedLocation.district, city: selectedLocation.city }}
+                    addressContext={savedAddressContext(selectedLocation)}
+                    confirmedAddressFingerprint={selectedLocation.confirmedAddressFingerprint}
                     value={selectedLocation.latitude !== undefined && selectedLocation.longitude !== undefined ? { latitude: selectedLocation.latitude!, longitude: selectedLocation.longitude! } : undefined}
-                    onChange={(point) => { setValue('latitude', point.latitude, { shouldDirty: true }); setValue('longitude', point.longitude, { shouldDirty: true }); }} />
+                    onChange={(point, fingerprint) => {
+                      setValue('latitude', point.latitude, { shouldDirty: true });
+                      setValue('longitude', point.longitude, { shouldDirty: true });
+                      setValue('confirmedAddressFingerprint', fingerprint, { shouldDirty: true, shouldValidate: true });
+                    }} />
+                  {formState.errors.confirmedAddressFingerprint && <p role="alert" className="text-sm text-danger">{formState.errors.confirmedAddressFingerprint.message}</p>}
                   <label className="ui-transition flex min-h-12 cursor-pointer items-center gap-3 rounded-control border border-border bg-surface-subtle px-4 py-3 font-medium text-ink transition-colors hover:border-border-strong hover:bg-primary-soft/50" htmlFor="address-default">
                     <input className="size-5 accent-primary" id="address-default" type="checkbox" {...register('isDefault')} />
                     Dùng làm địa chỉ mặc định

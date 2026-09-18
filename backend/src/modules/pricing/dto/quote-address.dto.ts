@@ -34,10 +34,13 @@ export class QuoteAddressDto {
   @Matches(/\S/)
   ward!: string;
 
-  @ApiProperty({ minLength: 2, maxLength: 100 })
+  @ApiProperty({
+    minLength: 0,
+    maxLength: 100,
+    description: 'Legacy district; empty for two-level addresses',
+  })
   @IsString()
-  @Length(2, 100)
-  @Matches(/\S/)
+  @Length(0, 100)
   district!: string;
 
   @ApiProperty({ minLength: 2, maxLength: 100 })

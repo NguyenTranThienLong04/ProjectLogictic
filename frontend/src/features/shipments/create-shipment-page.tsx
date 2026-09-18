@@ -106,9 +106,7 @@ export function CreateShipmentPage() {
           <form className="mt-6 grid min-w-0 gap-6 lg:mt-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start" noValidate onSubmit={submit}>
             <div className="min-w-0">
               <ShipmentFormFields
-                deliveryAddressContext={{ street: currentValues.deliveryStreetAddress, ward: currentValues.deliveryWard, district: currentValues.deliveryDistrict, city: currentValues.deliveryCity }}
-                deliveryLocation={currentValues.deliveryLatitude !== undefined && currentValues.deliveryLongitude !== undefined ? { latitude: currentValues.deliveryLatitude, longitude: currentValues.deliveryLongitude } : undefined}
-                onDeliveryLocation={(point) => { setValue('deliveryLatitude', point.latitude, { shouldDirty: true, shouldValidate: true }); setValue('deliveryLongitude', point.longitude, { shouldDirty: true, shouldValidate: true }); }}
+                control={control} setValue={setValue}
                 addresses={addressesQuery.data ?? []} errors={formState.errors} register={register} />
               <div className="mt-4">
                 <ErrorSummary message={quoteMutation.isError ? getApiErrorMessage(quoteMutation.error) : createMutation.isError ? getApiErrorMessage(createMutation.error) : undefined} />

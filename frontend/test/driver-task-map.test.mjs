@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { getAddressFingerprint } from '../src/features/addresses/address-location-model.ts';
 import {
   DRIVER_LOCATION_TTL_MS,
   buildGoogleMapsDirectionsUrl,
@@ -111,18 +112,19 @@ test('receiver coordinate inputs preserve a complete optional pair in the immuta
     deliveryContactName: 'Receiver',
     deliveryPhone: '0901234567',
     deliveryStreetAddress: '1 Nguyễn Huệ',
-    deliveryWard: 'Bến Nghé',
+    deliveryWard: 'Bến Thành',
     deliveryDistrict: 'Quận 1',
     deliveryCity: 'Hồ Chí Minh',
     deliveryLatitude: 10.7769,
     deliveryLongitude: 106.7009,
+    confirmedAddressFingerprint: getAddressFingerprint({ street: '1 Nguyễn Huệ', ward: 'Bến Thành', district: 'Quận 1', city: 'Hồ Chí Minh' }),
   };
 
   assert.deepEqual(deliverySnapshot(values), {
     contactName: 'Receiver',
     phone: '0901234567',
     streetAddress: '1 Nguyễn Huệ',
-    ward: 'Bến Nghé',
+    ward: 'Bến Thành',
     district: 'Quận 1',
     city: 'Hồ Chí Minh',
     latitude: 10.7769,
