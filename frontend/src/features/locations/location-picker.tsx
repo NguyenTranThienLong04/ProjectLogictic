@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { hasValidCoordinates } from './driver-task-map-model';
 import { LocationMap } from './location-map';
+import { AddressSearch } from './address-search';
 import { resolveAddressViewport, type LocationAddressContext } from './location-viewport';
 import { getAddressFingerprint, getConfirmedCoordinate, isLocationStale, STALE_LOCATION_MESSAGE, type Coordinate } from '../addresses/address-location-model';
 
@@ -29,6 +30,7 @@ function LocationPickerSession({
 }: LocationPickerProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Coordinate>();
+  const [mapSession, setMapSession] = useState(0);
   const selectedValue = getConfirmedCoordinate(value, confirmedAddressFingerprint, addressContext);
   const stale = isLocationStale(confirmedAddressFingerprint, addressContext);
   const select = useCallback((point: Coordinate) => {
@@ -41,6 +43,12 @@ function LocationPickerSession({
       <p aria-live="polite" className="text-sm tabular-nums text-muted-foreground">
         {selectedValue ? `${selectedValue.latitude.toFixed(6)}, ${selectedValue.longitude.toFixed(6)}` : 'Chưa chọn vị trí'}
       </p>
+      <AddressSearch address={addressContext} disabled={disabled} onSelect={(result) => {
+        if (!hasValidCoordinates(result)) return;
+        setDraft({ latitude: result.latitude, longitude: result.longitude });
+        setMapSession((session) => session + 1);
+        setOpen(true);
+      }} />
       {!open ? (
         <Button
           disabled={disabled}
@@ -59,6 +67,7 @@ function LocationPickerSession({
             bản đồ, Enter chọn tâm bản đồ.
           </p>
           <LocationMap
+            key={mapSession}
             ariaLabel={label}
             initialViewport={resolveAddressViewport(addressContext)}
             markers={draft ? [{ ...draft, id: 'selection', label }] : []}

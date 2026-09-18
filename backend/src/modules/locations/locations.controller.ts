@@ -22,12 +22,26 @@ import type {
   OperationalDriverLocationResponse,
 } from './locations.service.js';
 import { LocationsService } from './locations.service.js';
+import { AddressSearchService } from './address-search.service.js';
+import { AddressSearchDto } from './dto/address-search.dto.js';
 
 @ApiTags('locations')
 @ApiBearerAuth()
 @Controller()
 export class LocationsController {
-  constructor(private readonly locations: LocationsService) {}
+  constructor(
+    private readonly locations: LocationsService,
+    private readonly addressSearch: AddressSearchService,
+  ) {}
+
+  @Post('locations/address-search')
+  @Roles(UserRole.CUSTOMER)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Search Vietnamese addresses for explicit map selection' })
+  searchAddress(@Body() dto: AddressSearchDto) {
+    return this.addressSearch.search(dto);
+  }
 
   @Post('driver/location')
   @Roles(UserRole.DRIVER)

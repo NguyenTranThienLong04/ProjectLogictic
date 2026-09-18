@@ -81,6 +81,13 @@ Cache key vd: `tracking:{trackingCode}`, `shipment:{id}:summary`. Mutation shipm
 
 Route cache G3B1 dùng key `route:{provider}:road_route:{roundedOrigin}:{roundedDestination}`, tọa độ làm tròn 4 chữ số thập phân và TTL mặc định 900 giây. Cache miss/read failure chỉ gọi provider hoặc fallback; Redis không giữ planned Trip snapshot.
 
+## ADDRESS GEOCODING (2026-09-19)
+
+- Separate from routing: `POST /api/v1/locations/address-search`, authenticated CUSTOMER, existing JWT/role guards and per-client throttle (10/minute). Structured trimmed/length-bounded street/ward/district/city; fixed upstream `https://us1.locationiq.com/v1/search`, native fetch, 5-second timeout, no redirects, `countrycodes=vn`, `limit=5`, `addressdetails=1`, Vietnamese language. Backend also filters non-VN and malformed/non-finite/out-of-range results and returns only normalized fields. Provider exceptions/body/credential URLs never reach logs or clients. Existing exception filter sanitizes 503 responses; upstream/local quota errors return 429.
+- `LOCATIONIQ_API_KEY` is optional, backend-only and format-validated; blank disables search with 503 while manual picker remains usable. No VITE key, schema/migration, new dependency or business mutation. C01/C04/C08/C16 preserved.
+- Reuses existing Redis-backed throttler for account-wide 2/second, 60/minute, 5,000/day windows before upstream fetch. Existing local outage fallback supports the documented single backend instance; multi-instance Redis outage and other applications sharing the same key can exceed the account budget. Provider 429 remains handled. No result cache is introduced, so search does not depend on Redis cache availability.
+- Terms verified 2026-09-19: [Free pricing/attribution](https://locationiq.com/pricing), [search contract](https://docs.locationiq.com/docs/search-forward-geocoding), [storage/caching](https://help.locationiq.com/support/solutions/articles/36000216111-can-i-save-addresses-from-api-output-). Free permits limited commercial use with a prominent LocationIQ link, persistent output storage, and request-response caching up to 48 hours. Geocoding is a suggestion: street/house-level coverage is not guaranteed, and new administrative names may not match upstream data. Local dataset stays authoritative; user must confirm the pin.
+
 ## ROUTE PROVIDER (G3B1)
 
 - Backend abstraction: `RouteProvider` + resilient `RouteMetricsService`; business modules không chứa Google/Mapbox/OSRM-specific parsing.

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 import { build, preview } from 'vite';
 import { fileURLToPath } from 'node:url';
+const searchMode = process.argv.includes('--search');
 
 // Tests real page components and captured HTTP payloads; does not claim API/DB persistence.
 const config = {
@@ -30,6 +31,9 @@ try {
   const writes = [];
   let quotes = [];
   let shipments = [];
+  let searches = 0;
+  let searchResponse = 'success';
+  const searchResult = { id: 'vn-1', displayName: '123 Nguyễn Trãi, Bến Thành, Hồ Chí Minh', latitude: 10.77, longitude: 106.69 };
   const initialAddress = {
     id: '210e5c56-6639-46a3-98dd-dd6e3da0498d', label: 'Nhà', contactName: 'Nguyễn An', phone: '0901234567',
     streetAddress: '123 Nguyễn Trãi', city: 'Hồ Chí Minh', ward: 'Bến Thành', district: '',
@@ -39,7 +43,15 @@ try {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     let data;
-    if (path.endsWith('/notifications')) data = { items: [], unreadCount: 0, total: 0 };
+    if (path.endsWith('/locations/address-search')) {
+      searches++;
+      const body = request.postDataJSON();
+      assert(body.street && body.city);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      if (searchResponse === 'error') { await route.fulfill({ status: 503, json: { message: 'Unavailable' } }); return; }
+      data = searchResponse === 'empty' ? [] : [searchResult, { ...searchResult, id: 'vn-2', displayName: 'Kết quả thứ hai' }];
+    }
+    else if (path.endsWith('/notifications')) data = { items: [], unreadCount: 0, total: 0 };
     else if (path.endsWith('/addresses') && request.method() === 'GET') data = addresses;
     else if (path.includes('/addresses') && ['POST', 'PATCH'].includes(request.method())) {
       const body = request.postDataJSON();
@@ -69,7 +81,29 @@ try {
   const confirm = page.getByRole('button', { name: 'Xác nhận vị trí' });
   const openMap = async () => page.getByRole('button', { name: /Chọn vị trí trên bản đồ|Thay đổi vị trí/ }).click();
   const pin = async () => {
-    await openMap();
+    if (searchMode) {
+      const before = searches;
+      const previous = await selectedText().textContent();
+      await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).evaluate((button) => { button.click(); button.click(); });
+      await expect(page.getByRole('button', { name: 'Tìm địa chỉ', exact: true })).toBeDisabled();
+      await page.getByRole('button', { name: searchResult.displayName, exact: true }).waitFor();
+      assert.equal(searches, before + 1);
+      await expect(map).toHaveCount(0);
+      await expect(selectedText()).toHaveText(previous);
+      await page.getByRole('button', { name: searchResult.displayName, exact: true }).click();
+      await expect(page.locator('.leaflet-marker-draggable')).toHaveCount(1);
+      await expect.poll(() => page.locator('.leaflet-tile[src*=".org/16/"]').count()).toBeGreaterThan(0);
+      await expect(selectedText()).toHaveText(previous);
+      const marker = page.locator('.leaflet-marker-draggable');
+      await marker.scrollIntoViewIfNeeded();
+      const box = await marker.boundingBox();
+      await page.mouse.move(box.x + 12, box.y + 12);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 50, box.y + 42, { steps: 8 });
+      await page.mouse.up();
+      const draft = await page.locator('section[aria-label^="Vị trí"] > p[role="status"]').last().textContent();
+      assert.notEqual(draft, '10.770000, 106.690000');
+    } else await openMap();
     await map.click({ position: { x: 100, y: 120 } });
     await expect(confirm).toBeEnabled();
     await confirm.click();
@@ -115,6 +149,12 @@ try {
     await page.getByLabel('Tên gợi nhớ').fill('Nhà');
     await page.getByLabel('Tên người liên hệ').fill('Nguyễn An');
     await page.getByLabel('Số điện thoại', { exact: true }).fill('0901234567');
+    if (searchMode) {
+      const before = searches;
+      for (let i = 0; i < 10; i++) await page.getByLabel('Số nhà, tên đường').fill(`${i} Nguyễn Trãi`);
+      await page.getByLabel('Số nhà, tên đường').blur();
+      assert.equal(searches, before);
+    }
     await page.getByLabel('Số nhà, tên đường').fill('123 Nguyễn Trãi');
     await pin();
     const selected = await selectedText().textContent();
@@ -203,6 +243,33 @@ try {
       assert.equal(shipments[0].deliveryAddress.streetAddress, '126 Nguyễn Trãi');
     }
     console.log(`PASS ${screen}: stale omitted from actual HTTP payload, current confirmation included, contact change preserved`);
+  }
+  if (searchMode) {
+    addresses = [];
+    for (const failure of ['empty', 'error']) {
+      searchResponse = failure;
+      await open('/addresses');
+      await choose(city, 'ho chi minh', 'Hồ Chí Minh');
+      await choose(ward, 'ben thanh', 'Bến Thành');
+      await expect(page.getByRole('button', { name: 'Tìm địa chỉ', exact: true })).toBeDisabled();
+      await page.getByLabel('Số nhà, tên đường').fill('123 Nguyễn Trãi');
+      await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).click();
+      await expect(page.getByText('Không tìm thấy địa chỉ chính xác. Bạn có thể chọn trực tiếp trên bản đồ.')).toBeVisible();
+      await openMap();
+      await map.click({ position: { x: 100, y: 120 } });
+      await confirm.click();
+      assert.notEqual(await selectedText().textContent(), 'Chưa chọn vị trí');
+    }
+    searchResponse = 'success';
+    await open('/addresses');
+    await choose(city, 'ho chi minh', 'Hồ Chí Minh');
+    await page.getByLabel('Số nhà, tên đường').fill('123 Nguyễn Trãi');
+    await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).click();
+    await page.getByLabel('Số nhà, tên đường').fill('124 Nguyễn Trãi');
+    await page.waitForTimeout(400);
+    await expect(page.getByRole('list', { name: 'Kết quả tìm địa chỉ' })).toHaveCount(0);
+    await expect(map).toHaveCount(0);
+    console.log('PASS explicit search: typing 0, double-click 1, choice/draft/drag/confirm, all forms, stale payloads, fail/empty manual fallback, cancelled stale response');
   }
   assert.deepEqual(errors, []);
   assert.deepEqual(external, []);

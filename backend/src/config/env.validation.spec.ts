@@ -17,6 +17,20 @@ describe('validateEnvironment', () => {
     expect(result.ROUTE_PROVIDER).toBe('DISABLED');
     expect(result.ROUTE_TIMEOUT_MS).toBe('2500');
     expect(result.PAYMENT_PROVIDER).toBe('DISABLED');
+    expect(result.LOCATIONIQ_API_KEY).toBe('');
+  });
+
+  it('trims the optional backend LocationIQ key', () => {
+    expect(
+      validateEnvironment({ ...validEnvironment, LOCATIONIQ_API_KEY: ' test-only-key ' })
+        .LOCATIONIQ_API_KEY,
+    ).toBe('test-only-key');
+  });
+
+  it('rejects invalid LocationIQ keys without echoing their contents', () => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, LOCATIONIQ_API_KEY: 'secret?unsafe=key' }),
+    ).toThrow('LOCATIONIQ_API_KEY has an invalid format');
   });
 
   it('rejects a missing database URL', () => {

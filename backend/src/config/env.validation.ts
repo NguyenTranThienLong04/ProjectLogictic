@@ -205,8 +205,14 @@ export function validateEnvironment(environment: Environment): Environment {
     throw new Error('PASSWORD_RESET_URL must use HTTPS in production');
   }
 
+  const locationIqKey = environment.LOCATIONIQ_API_KEY?.trim() || '';
+  if (locationIqKey && !/^[A-Za-z0-9._-]{8,256}$/.test(locationIqKey)) {
+    throw new Error('LOCATIONIQ_API_KEY has an invalid format');
+  }
+
   return {
     ...environment,
+    LOCATIONIQ_API_KEY: locationIqKey,
     NODE_ENV: nodeEnvironment,
     PORT: String(port),
     DATABASE_URL: requiredUrl(environment, 'DATABASE_URL', new Set(['postgres:', 'postgresql:'])),

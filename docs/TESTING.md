@@ -5,6 +5,12 @@ Unit > Integration > E2E critical flows. Business-critical feature chưa test = 
 
 ## REQUIRED TEST CASES
 
+### Explicit LocationIQ address search (2026-09-19)
+
+- Backend: `address-search.service.spec.ts` covers VN request/normalization, invalid coordinates, timeout/network failure, 429/5xx/invalid JSON/body, no match, blank key, account throttle and DTO 400/trim. `address-search.controller.spec.ts` exercises HTTP with real JWT/role/throttle/validation guards (session repository and provider mocked): 401, 403, 400, 200, 429. Config tests cover blank/trim/invalid key. Existing address/shipment/ranking regressions remain required.
+- Run `node frontend/test/address-location/check.mjs --search`: production-built real Saved Address/Shipment/Quote components, intercepted API payloads, aborted tiles. Four viewports (375×812, 812×375, 768×1024, 1440×900); 10 edits → 0 requests, double-click → 1 request/loading, explicit result choice → zoom-16 draft without confirmation, drag, Confirm/payload, stale street/ward/province blocking or omission, metadata preservation, empty/error manual fallback and in-flight address change discarding results. Run without `--search` for original manual-selection regression.
+- This is local browser integration, not live LocationIQ accuracy, real database persistence or authenticated staging evidence. Staging requires deployment/backend key and an authenticated end-to-end smoke before PASS can be claimed.
+
 ### Saved address / location regression
 
 - Saved CustomerAddress map coordinate persists after create/edit/reload.
