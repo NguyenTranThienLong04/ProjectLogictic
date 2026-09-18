@@ -12,6 +12,31 @@ I2 chuẩn bị release engineering, không thêm feature và không deploy prod
 - Log/metrics, cảnh báo DB/Redis/queue failures, readiness failures, HTTP 5xx và 429. Probe live `/api/v1/health/live`; ready `/api/v1/health/ready`. Live không truy cập dependency; PostgreSQL down → ready 503, Redis runtime down → ready 200 `degraded`. Redis down lúc production startup → fail startup.
 - File storage chưa có upload/POD binary pipeline trong release này. Không tạo dependency storage giả; nếu bổ sung upload sau này phải provision qua StorageService và security review riêng.
 
+## Render staging SPA routing
+
+For the existing `logistics-staging-web` Render **Static Site**, configure
+**Redirects/Rewrites** in the service dashboard:
+
+| Source | Destination | Action |
+|---|---|---|
+| `/*` | `/index.html` | Rewrite |
+
+Keep any existing specific API rules before this catch-all. Use Rewrite, not a
+redirect: the browser must retain `/shipments/new` for React Router. Render serves
+existing assets before applying rewrite rules. See [Render's routing documentation](https://render.com/docs/redirects-rewrites).
+
+The repository's `deploy/nginx.conf` already has SPA fallback, but it is installed
+only by the Docker `frontend` target; a Render Static Site does not run that nginx
+configuration. Adding a file to the repo alone does not update a manually configured
+Render service. Verify the service type/settings before applying this rule; do not
+create a second service or change React Router to compensate for hosting.
+
+After saving the rule, run `node deploy/staging-web-smoke.mjs`. It checks `/`, a
+direct `/shipments/new` navigation, and a reload of that exact path, with real
+Chromium requests. A redirect to the existing login screen is valid SPA/auth behavior;
+it does not prove the authenticated shipment form or Leaflet works. Tile verification
+must wait until the route passes and an authorized staging session is available.
+
 ## Production environment
 
 Template development là `.env.example`; template production/staging đầy đủ là [`deploy/.env.example`](../deploy/.env.example). Inject secrets qua secret manager/runtime environment; không bake vào artifact hoặc `VITE_*`. Không gửi secret trong chat. Staging bình thường chạy `NODE_ENV=production`, routing/payment `DISABLED`, GPS `REAL`; simulation chỉ dùng runner disposable trong CI với development/test mode. Không tạo staging simulation release image.

@@ -58,10 +58,27 @@ export function LocationMap({
     const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
-    }).addTo(map.current);
+    });
+    const loadedTiles = new Set<HTMLElement>();
+    const failedTiles = new Set<HTMLElement>();
     tiles.on('loading', () => setTileState('loading'));
-    tiles.on('tileerror', () => setTileState('error'));
-    tiles.on('load', () => setTileState((state) => (state === 'error' ? state : 'ready')));
+    tiles.on('tileload', (event: L.TileEvent) => {
+      loadedTiles.add(event.tile);
+      failedTiles.delete(event.tile);
+    });
+    tiles.on('tileerror', (event: L.TileErrorEvent) => {
+      failedTiles.add(event.tile);
+    });
+    tiles.on('tileunload', (event: L.TileEvent) => {
+      loadedTiles.delete(event.tile);
+      failedTiles.delete(event.tile);
+    });
+    // Leaflet fires load when requests settle, including failed requests.
+    // A single failed tile must not mark the usable base map as unavailable.
+    tiles.on('load', () => {
+      setTileState(failedTiles.size === 0 ? 'ready' : loadedTiles.size > 0 ? 'partial' : 'error');
+    });
+    tiles.addTo(map.current);
     const select = (point: L.LatLng) =>
       selection.current?.({
         latitude: Number(point.lat.toFixed(6)),
@@ -159,7 +176,9 @@ export function LocationMap({
         <p role="status" className="text-sm text-muted-foreground">
           {tileState === 'error'
             ? 'Không tải được bản đồ. Đóng và mở lại để thử lại.'
-            : 'Đang tải bản đồ…'}
+            : tileState === 'partial'
+              ? 'Một phần bản đồ chưa tải được. Bạn vẫn có thể chọn vị trí hoặc đóng và mở lại để thử lại.'
+              : 'Đang tải bản đồ…'}
         </p>
       ) : null}
       <div
