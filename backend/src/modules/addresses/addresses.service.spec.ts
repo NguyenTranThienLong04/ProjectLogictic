@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { jest } from '@jest/globals';
-import type { CustomerAddress } from '../../generated/prisma/client.js';
+import { Prisma, type CustomerAddress } from '../../generated/prisma/client.js';
 import type { PrismaService } from '../../database/prisma.service.js';
 import { AddressesService } from './addresses.service.js';
 import type { CreateAddressDto } from './dto/create-address.dto.js';
@@ -41,6 +41,45 @@ const createDto: CreateAddressDto = {
 };
 
 describe('AddressesService', () => {
+  it('preserves coordinates through create, edit and list responses', async () => {
+    let stored = address();
+    const write = ({ data }: { data: { latitude?: number; longitude?: number } }) => {
+      stored = {
+        ...stored,
+        latitude: new Prisma.Decimal(data.latitude!),
+        longitude: new Prisma.Decimal(data.longitude!),
+      };
+      return Promise.resolve(stored);
+    };
+    const transaction = {
+      customerAddress: {
+        count: jest.fn(() => Promise.resolve(1)),
+        create: jest.fn(write),
+        update: jest.fn(write),
+        findFirst: jest.fn(() => Promise.resolve(stored)),
+        findMany: jest.fn(() => Promise.resolve([stored])),
+      },
+    };
+    const service = new AddressesService({
+      ...transaction,
+      $transaction: (callback: (client: typeof transaction) => unknown) => callback(transaction),
+    } as unknown as PrismaService);
+    expect(
+      await service.create(customerId, { ...createDto, latitude: 10.7769, longitude: 106.7009 }),
+    ).toMatchObject({ latitude: 10.7769, longitude: 106.7009 });
+    expect(transaction.customerAddress.create.mock.calls[0]?.[0].data).toMatchObject({
+      latitude: 10.7769,
+      longitude: 106.7009,
+    });
+    expect(
+      await service.update(customerId, addressId, { latitude: 21.0285, longitude: 105.8542 }),
+    ).toMatchObject({ latitude: 21.0285, longitude: 105.8542 });
+    expect((await service.list(customerId))[0]).toMatchObject({
+      latitude: 21.0285,
+      longitude: 105.8542,
+    });
+  });
+
   it('scopes address lists to the authenticated customer', async () => {
     const findMany = jest.fn(() => Promise.resolve([address()]));
     const service = new AddressesService({

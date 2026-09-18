@@ -5,16 +5,18 @@ import { FormField } from '../../components/ui/form-field';
 import { SelectField } from '../../components/ui/select-field';
 import type { Address } from '../addresses/address-api';
 import type { ShipmentFormValues } from './shipment-form';
-import { parseOptionalCoordinateInput } from './shipment-form';
+import { LocationPicker } from '../locations/location-picker';
 import { SHIPPING_FEE_PAYER_OPTIONS } from './shipping-fee-payer';
 
 interface ShipmentFormFieldsProps {
+  deliveryLocation?: { latitude: number; longitude: number };
+  onDeliveryLocation: (point: { latitude: number; longitude: number }) => void;
   addresses: Address[];
   errors: FieldErrors<ShipmentFormValues>;
   register: UseFormRegister<ShipmentFormValues>;
 }
 
-export function ShipmentFormFields({ addresses, errors, register }: ShipmentFormFieldsProps) {
+export function ShipmentFormFields({ addresses, errors, register, deliveryLocation, onDeliveryLocation }: ShipmentFormFieldsProps) {
   return (
     <div className="space-y-6">
       <fieldset className="min-w-0 rounded-surface border border-border bg-surface p-4 shadow-surface sm:p-6">
@@ -97,41 +99,9 @@ export function ShipmentFormFields({ addresses, errors, register }: ShipmentForm
               {...register('deliveryCity')}
             />
           </div>
-          <details className="rounded-control border border-border bg-surface-subtle p-3 sm:col-span-2">
-            <summary className="focus-ring flex min-h-12 cursor-pointer items-center font-semibold text-primary">
-              Thêm ghim tọa độ điểm giao (tùy chọn)
-            </summary>
-            <p className="mb-4 mt-2 text-sm leading-6 text-muted-foreground">
-              Nhập đủ cặp tọa độ từ ghim bản đồ đã được người nhận xác nhận. Hệ thống không tự đoán
-              vị trí từ địa chỉ.
-            </p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField
-                error={errors.deliveryLatitude?.message}
-                helperText="Giá trị từ -90 đến 90."
-                id="delivery-latitude"
-                inputMode="decimal"
-                label="Vĩ độ"
-                max="90"
-                min="-90"
-                step="0.000001"
-                type="number"
-                {...register('deliveryLatitude', { setValueAs: parseOptionalCoordinateInput })}
-              />
-              <FormField
-                error={errors.deliveryLongitude?.message}
-                helperText="Giá trị từ -180 đến 180."
-                id="delivery-longitude"
-                inputMode="decimal"
-                label="Kinh độ"
-                max="180"
-                min="-180"
-                step="0.000001"
-                type="number"
-                {...register('deliveryLongitude', { setValueAs: parseOptionalCoordinateInput })}
-              />
-            </div>
-          </details>
+          <div className="sm:col-span-2">
+            <LocationPicker label="Vị trí giao hàng (tùy chọn)" value={deliveryLocation} onChange={onDeliveryLocation} />
+          </div>
         </div>
       </fieldset>
 

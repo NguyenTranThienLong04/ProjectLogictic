@@ -271,6 +271,14 @@ describe('ShipmentsService', () => {
       totalFee: 35_501,
       shippingFeePayer: ShippingFeePayer.SENDER,
     });
+    expect(createData?.pickupSnapshot).toMatchObject({ latitude: 10.7769, longitude: 106.7009 });
+    const savedAddress = (await transaction.customerAddress.findFirst.mock.results[0].value) as {
+      latitude: Prisma.Decimal;
+      longitude: Prisma.Decimal;
+    };
+    savedAddress.latitude = new Prisma.Decimal(21);
+    savedAddress.longitude = new Prisma.Decimal(105);
+    expect(createData?.pickupSnapshot).toMatchObject({ latitude: 10.7769, longitude: 106.7009 });
     expect(createData?.pricingSnapshot).toEqual({
       configVersion: 1,
       baseFee: 30_000,

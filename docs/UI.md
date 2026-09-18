@@ -25,6 +25,12 @@ StatusBadge · EmptyState · ErrorState · LoadingState · PageHeader
 SearchFilter · NotificationBell · Timeline · Map
 ```
 
+### LocationPicker
+
+- `features/locations/location-picker.tsx` là shared/reusable picker của Customer Address và form dùng chung Create Shipment/Báo giá. Reuse `LocationMap` và Leaflet/tile setup hiện có, không khởi tạo Leaflet riêng trong từng form.
+- Interaction canonical: **Chọn vị trí trên bản đồ → click map → marker → drag chỉnh vị trí → Xác nhận vị trí → readonly selected coordinate → Thay đổi vị trí**. Hủy giữ giá trị đã xác nhận. Main form không có trường latitude/longitude chỉnh tay; delivery location vẫn tùy chọn theo DOMAIN.
+- Dùng semantic tokens, layout responsive, loading/error text và retry bằng đóng/mở picker. Keyboard: focus bản đồ, phím mũi tên pan, Enter chọn tâm; click map là phương án thay thế drag. Không dùng chuyển động bản đồ bắt buộc; giữ label, focus và trạng thái disabled của shared Button.
+
 ### STATUSBADGE — CANONICAL COLOR MAPPING
 
 Đây là **nguồn duy nhất** cho màu `StatusBadge` trên toàn app. Implementation phải tra đúng key tại shared component, không tự gán màu trong từng screen. Mỗi badge luôn hiển thị nhãn chữ và chấm trạng thái; màu không được là tín hiệu duy nhất. Các class dưới đây là tổ hợp cố định `background / text / border / dot`.

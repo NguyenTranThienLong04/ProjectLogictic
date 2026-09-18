@@ -1,6 +1,6 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { hasValidCoordinates } from './driver-task-map-model';
 
 export interface MapMarker {
@@ -24,14 +24,23 @@ export function LocationMap({
   ariaLabel = 'Bản đồ vị trí tài xế',
   markers,
   polylines = EMPTY_POLYLINES,
+  onSelect,
 }: {
   ariaLabel?: string;
   markers: MapMarker[];
   polylines?: MapPolyline[];
+  onSelect?: (point: { latitude: number; longitude: number }) => void;
 }) {
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
+  const initialSelection = useRef(onSelect ? markers[0] : undefined);
+
+  const selection = useRef(onSelect);
+  const [tileState, setTileState] = useState('loading');
+  useEffect(() => {
+    selection.current = onSelect;
+  }, [onSelect]);
 
   useEffect(() => {
     if (!element.current || map.current) return;
@@ -40,11 +49,28 @@ export function LocationMap({
       zoomAnimation: false,
       fadeAnimation: false,
       markerZoomAnimation: false,
-    }).setView([0, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    }).setView(
+      initialSelection.current
+        ? [initialSelection.current.latitude, initialSelection.current.longitude]
+        : [0, 0],
+      initialSelection.current ? 14 : 2,
+    );
+    const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
     }).addTo(map.current);
+    tiles.on('loading', () => setTileState('loading'));
+    tiles.on('tileerror', () => setTileState('error'));
+    tiles.on('load', () => setTileState((state) => (state === 'error' ? state : 'ready')));
+    const select = (point: L.LatLng) =>
+      selection.current?.({
+        latitude: Number(point.lat.toFixed(6)),
+        longitude: Number(point.wrap().lng.toFixed(6)),
+      });
+    map.current.on('click', (event: L.LeafletMouseEvent) => select(event.latlng));
+    map.current.on('keypress', (event: L.LeafletKeyboardEvent) => {
+      if (event.originalEvent.key === 'Enter' && map.current) select(map.current.getCenter());
+    });
     layer.current = L.layerGroup().addTo(map.current);
     return () => {
       map.current?.remove();
@@ -90,6 +116,27 @@ export function LocationMap({
       const origin = marker.tone === 'origin';
       const popup = document.createElement('span');
       popup.textContent = marker.label;
+      if (onSelect) {
+        L.marker([marker.latitude, marker.longitude], {
+          draggable: true,
+          title: marker.label,
+          icon: L.divIcon({
+            className: '',
+            html: '<span class="block size-6 rounded-full border-4 border-primary bg-surface shadow-surface"></span>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          }),
+        })
+          .on('dragend', (event: L.DragEndEvent) => {
+            const point = (event.target as L.Marker).getLatLng();
+            onSelect({
+              latitude: Number(point.lat.toFixed(6)),
+              longitude: Number(point.wrap().lng.toFixed(6)),
+            });
+          })
+          .addTo(layer.current);
+        continue;
+      }
       L.circleMarker([marker.latitude, marker.longitude], {
         color: destination ? accentStrongColor : origin ? inkColor : primaryStrongColor,
         fillColor: destination ? accentColor : origin ? mutedColor : primaryColor,
@@ -100,17 +147,28 @@ export function LocationMap({
         .bindPopup(popup)
         .addTo(layer.current);
     }
+    if (onSelect) return;
     if (points.length === 1) map.current.setView(points[0], 14, { animate: false });
     if (points.length > 1)
       map.current.fitBounds(points, { maxZoom: 15, padding: [40, 40], animate: false });
-  }, [markers, polylines]);
+  }, [markers, polylines, onSelect]);
 
   return (
-    <div
-      aria-label={ariaLabel}
-      className="h-72 overflow-hidden rounded-surface border border-border bg-surface shadow-surface sm:h-80 lg:h-96"
-      ref={element}
-      role="region"
-    />
+    <>
+      {onSelect && tileState !== 'ready' ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {tileState === 'error'
+            ? 'Không tải được bản đồ. Đóng và mở lại để thử lại.'
+            : 'Đang tải bản đồ…'}
+        </p>
+      ) : null}
+      <div
+        aria-label={ariaLabel}
+        className="h-72 overflow-hidden rounded-surface border border-border bg-surface shadow-surface sm:h-80 lg:h-96"
+        ref={element}
+        role="region"
+        tabIndex={0}
+      />
+    </>
   );
 }

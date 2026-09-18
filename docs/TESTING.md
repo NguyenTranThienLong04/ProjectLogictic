@@ -4,6 +4,18 @@
 Unit > Integration > E2E critical flows. Business-critical feature chưa test = chưa DONE. Không sửa/xoá test chỉ để build pass.
 
 ## REQUIRED TEST CASES
+
+### Saved address / location regression
+
+- Saved CustomerAddress map coordinate persists after create/edit/reload.
+- Create Shipment from saved pickup address copies valid latitude/longitude into immutable pickup snapshot; editing CustomerAddress afterward does not mutate that snapshot.
+- Pickup AssignmentCandidates ranking succeeds with valid pickup snapshot coordinates; missing, incomplete, NaN, Infinity or out-of-range coordinates fail safely before route calculation.
+- Backend rejects latitude outside `[-90, 90]` and longitude outside `[-180, 180]`.
+- Delivery location selected by LocationPicker reaches the backend as the selected coordinate pair without editable latitude/longitude UI fields; omission remains supported.
+- Picker click/drag/confirm, keyboard selection, cancel preserving the previous value, tile failure feedback and responsive layout remain usable.
+
+Service/DTO unit coverage: `addresses.service.spec.ts`, `create-address.dto.spec.ts`, `shipments.service.spec.ts`, `assignment-candidates.service.spec.ts`, `quote-address.dto.spec.ts`. Service mocks verify persistence mapping, not real database reload. Independent Chromium picker smoke: start frontend Vite on port 5179, then run `node frontend/test/location-picker/check.mjs`; fixture uses the real shared component with tile requests aborted to exercise unavailable tiles, without an API/database. This smoke does not replace authenticated API/database E2E for create/edit/reload and shipment creation.
+
 ```
 PENDING → CONFIRMED succeeds
 PENDING → DELIVERED rejected

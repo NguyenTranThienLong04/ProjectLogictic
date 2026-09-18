@@ -31,7 +31,7 @@ export function CreateShipmentPage() {
   const addressesQuery = useQuery({ queryKey: ['addresses'], queryFn: listAddresses });
   const [clientRequestId] = useState(() => crypto.randomUUID());
   const [quotedSignature, setQuotedSignature] = useState<string>();
-  const { control, formState, handleSubmit, register } = useForm<ShipmentFormValues>({
+  const { control, formState, handleSubmit, register, setValue } = useForm<ShipmentFormValues>({
     resolver: zodResolver(shipmentFormSchema),
     mode: 'onBlur',
     defaultValues: shipmentFormDefaults,
@@ -105,7 +105,10 @@ export function CreateShipmentPage() {
         ) : (
           <form className="mt-6 grid min-w-0 gap-6 lg:mt-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start" noValidate onSubmit={submit}>
             <div className="min-w-0">
-              <ShipmentFormFields addresses={addressesQuery.data ?? []} errors={formState.errors} register={register} />
+              <ShipmentFormFields
+                deliveryLocation={currentValues.deliveryLatitude !== undefined && currentValues.deliveryLongitude !== undefined ? { latitude: currentValues.deliveryLatitude, longitude: currentValues.deliveryLongitude } : undefined}
+                onDeliveryLocation={(point) => { setValue('deliveryLatitude', point.latitude, { shouldDirty: true, shouldValidate: true }); setValue('deliveryLongitude', point.longitude, { shouldDirty: true, shouldValidate: true }); }}
+                addresses={addressesQuery.data ?? []} errors={formState.errors} register={register} />
               <div className="mt-4">
                 <ErrorSummary message={quoteMutation.isError ? getApiErrorMessage(quoteMutation.error) : createMutation.isError ? getApiErrorMessage(createMutation.error) : undefined} />
               </div>

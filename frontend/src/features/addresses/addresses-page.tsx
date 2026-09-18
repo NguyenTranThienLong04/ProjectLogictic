@@ -1,7 +1,8 @@
+import { LocationPicker } from '../locations/location-picker';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { Button } from '../../components/ui/button';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
@@ -31,6 +32,8 @@ const addressSchema = z.object({
   ward: z.string().trim().min(2, 'Nhập phường/xã').max(100),
   district: z.string().trim().min(2, 'Nhập quận/huyện').max(100),
   city: z.string().trim().min(2, 'Nhập tỉnh/thành phố').max(100),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
   isDefault: z.boolean(),
 });
 type AddressFormValues = z.infer<typeof addressSchema>;
@@ -53,11 +56,13 @@ export function AddressesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string>();
   const [successMessage, setSuccessMessage] = useState<string>();
-  const { formState, handleSubmit, register, reset } = useForm<AddressFormValues>({
+  const { formState, handleSubmit, register, reset, control, setValue } = useForm<AddressFormValues>({
     resolver: zodResolver(addressSchema),
     mode: 'onBlur',
     defaultValues: emptyForm,
   });
+
+  const selectedLocation = useWatch({ control });
 
   const showForm = formOpen || addressesQuery.data?.length === 0;
 
@@ -105,6 +110,8 @@ export function AddressesPage() {
       ward: address.ward,
       district: address.district,
       city: address.city,
+      latitude: address.latitude ?? undefined,
+      longitude: address.longitude ?? undefined,
       isDefault: address.isDefault,
     });
     setFormOpen(true);
@@ -257,6 +264,9 @@ export function AddressesPage() {
                     <FormField error={formState.errors.district?.message} id="address-district" label="Quận / huyện" {...register('district')} />
                   </div>
                   <FormField error={formState.errors.city?.message} id="address-city" label="Tỉnh / thành phố" {...register('city')} />
+                  <LocationPicker key={editing?.id ?? 'new'} label="Vị trí địa chỉ" disabled={saveMutation.isPending}
+                    value={selectedLocation.latitude !== undefined && selectedLocation.longitude !== undefined ? { latitude: selectedLocation.latitude!, longitude: selectedLocation.longitude! } : undefined}
+                    onChange={(point) => { setValue('latitude', point.latitude, { shouldDirty: true }); setValue('longitude', point.longitude, { shouldDirty: true }); }} />
                   <label className="ui-transition flex min-h-12 cursor-pointer items-center gap-3 rounded-control border border-border bg-surface-subtle px-4 py-3 font-medium text-ink transition-colors hover:border-border-strong hover:bg-primary-soft/50" htmlFor="address-default">
                     <input className="size-5 accent-primary" id="address-default" type="checkbox" {...register('isDefault')} />
                     Dùng làm địa chỉ mặc định

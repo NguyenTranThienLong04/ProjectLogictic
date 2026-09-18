@@ -114,6 +114,32 @@ function buildService(
 }
 
 describe('AssignmentCandidatesService', () => {
+  it.each([
+    {},
+    { latitude: 10 },
+    { longitude: 106 },
+    { latitude: NaN, longitude: 106 },
+    { latitude: 10, longitude: Infinity },
+    { latitude: -91, longitude: 106 },
+    { latitude: 91, longitude: 106 },
+    { latitude: 10, longitude: -181 },
+    { latitude: 10, longitude: 181 },
+  ])('rejects invalid pickup snapshot coordinates safely: %j', async (coordinate) => {
+    const { service, calculateBatch } = buildService(
+      {
+        id: 'shipment',
+        status: ShipmentStatus.AWAITING_PICKUP_ASSIGNMENT,
+        pickupSnapshot: { city: 'Ho Chi Minh', ...coordinate },
+      },
+      [],
+      new Map(),
+    );
+    await expect(service.listPickup('shipment')).rejects.toMatchObject({
+      response: { code: 'ASSIGNMENT_TARGET_LOCATION_REQUIRED' },
+    });
+    expect(calculateBatch).not.toHaveBeenCalled();
+  });
+
   it('ranks pickup candidates from current GPS to the pickup location and reports exclusions', async () => {
     const near = driver('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'DRV-NEAR', {
       id: warehouseId,
