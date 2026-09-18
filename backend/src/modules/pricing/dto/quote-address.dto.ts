@@ -1,4 +1,3 @@
-import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDefined,
@@ -54,7 +53,6 @@ export class QuoteAddressDto {
     (address: QuoteAddressDto) => address.latitude !== undefined || address.longitude !== undefined,
   )
   @IsDefined()
-  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(-90)
   @Max(90)
@@ -65,7 +63,6 @@ export class QuoteAddressDto {
     (address: QuoteAddressDto) => address.latitude !== undefined || address.longitude !== undefined,
   )
   @IsDefined()
-  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(-180)
   @Max(180)

@@ -5,6 +5,9 @@ import { ValidationPipe } from '@nestjs/common';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import { AddressSearchService } from './address-search.service.js';
 import { AddressSearchDto } from './dto/address-search.dto.js';
+import { CreateAddressDto } from '../addresses/dto/create-address.dto.js';
+import { UpdateAddressDto } from '../addresses/dto/update-address.dto.js';
+import { QuoteAddressDto } from '../pricing/dto/quote-address.dto.js';
 
 const input = { street: '123 Nguyễn Trãi', city: 'Hồ Chí Minh', ward: 'Bến Thành' };
 const valid = {
@@ -103,6 +106,62 @@ describe('address search', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+  it.each([CreateAddressDto, UpdateAddressDto, QuoteAddressDto])(
+    'keeps provider precision compatible with %p without DTO coercion',
+    async (metatype) => {
+      // Raw coordinate strings observed in a live LocationIQ response.
+      fetchMock.mockResolvedValue(
+        new Response(JSON.stringify([{ ...valid, lat: '10.7695084', lon: '106.6907953' }])),
+      );
+      const [result] = await service.search(input);
+      expect(typeof result.latitude).toBe('number');
+      expect(typeof result.longitude).toBe('number');
+      const body = {
+        ...(metatype === QuoteAddressDto ? {} : { label: 'Home' }),
+        contactName: 'Test Customer',
+        phone: '0901234567',
+        streetAddress: '123 Street',
+        ward: 'Ben Thanh',
+        district: '',
+        city: 'Ho Chi Minh',
+        latitude: result.latitude,
+        longitude: result.longitude,
+      };
+      await expect(pipe.transform(body, { type: 'body', metatype })).resolves.toMatchObject({
+        latitude: 10.769508,
+        longitude: 106.690795,
+      });
+    },
+  );
+  it.each(['lat', 'lon'])('filters malformed %s before normalization', async (field) => {
+    for (const value of [
+      'NaN',
+      'Infinity',
+      '-Infinity',
+      '10.7oops',
+      '',
+      ' ',
+      null,
+      true,
+      [],
+      {},
+      field === 'lat' ? '90.0000001' : '180.0000001',
+      field === 'lat' ? '-90.0000001' : '-180.0000001',
+    ]) {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([{ ...valid, [field]: value }])));
+      // A fresh limiter keeps this parser test independent of account quotas.
+      const parser = new AddressSearchService(new ConfigService({ LOCATIONIQ_API_KEY: 'test' }), {
+        increment: () =>
+          Promise.resolve({
+            totalHits: 1,
+            timeToExpire: 1,
+            isBlocked: false,
+            timeToBlockExpire: 0,
+          }),
+      });
+      await expect(parser.search(input)).resolves.toEqual([]);
+    }
+  });
   it.each([
     { street: '', city: 'HCM' },
     { street: '   ', city: 'HCM' },

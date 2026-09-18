@@ -14,12 +14,28 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { LocationsController } from './locations.controller.js';
 import { LocationsService } from './locations.service.js';
 import { AddressSearchService } from './address-search.service.js';
+import { ApiResponseInterceptor } from '../../common/interceptors/api-response.interceptor.js';
+import { AddressesController } from '../addresses/addresses.controller.js';
+import { AddressesService } from '../addresses/addresses.service.js';
+import type { CreateAddressDto } from '../addresses/dto/create-address.dto.js';
+import type { UpdateAddressDto } from '../addresses/dto/update-address.dto.js';
 
 describe('address search HTTP boundary (session repository/provider mocked)', () => {
   let app: INestApplication;
   let jwt: JwtService;
   const secret = 'test-only-secret-for-address-search-1234';
-  const search = jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
+  const originalFetch = globalThis.fetch;
+  const service = new AddressSearchService(new ConfigService({ LOCATIONIQ_API_KEY: 'test' }), {
+    increment: () =>
+      Promise.resolve({
+        totalHits: 1,
+        timeToExpire: 1,
+        isBlocked: false,
+        timeToBlockExpire: 0,
+      }),
+  });
+  const search = jest.spyOn(service, 'search');
+  let saved: Partial<CreateAddressDto> = {};
   const session = {
     userId: 'customer',
     revokedAt: null,
@@ -33,12 +49,36 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
     },
   };
   beforeAll(async () => {
+    globalThis.fetch = jest.fn<typeof fetch>().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              place_id: '123',
+              display_name: 'Test address',
+              lat: '10.7695084',
+              lon: '106.6907953',
+              address: { country_code: 'vn' },
+            },
+          ]),
+        ),
+      ),
+    );
     const module = await Test.createTestingModule({
       imports: [JwtModule.register({}), ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }])],
-      controllers: [LocationsController],
+      controllers: [LocationsController, AddressesController],
       providers: [
         { provide: LocationsService, useValue: {} },
-        { provide: AddressSearchService, useValue: { search } },
+        { provide: AddressSearchService, useValue: service },
+        {
+          provide: AddressesService,
+          useValue: {
+            create: (_user: string, dto: CreateAddressDto) => Promise.resolve((saved = { ...dto })),
+            update: (_user: string, _id: string, dto: UpdateAddressDto) =>
+              Promise.resolve((saved = { ...saved, ...dto })),
+            list: () => Promise.resolve([saved]),
+          },
+        },
         {
           provide: ConfigService,
           useValue: new ConfigService({
@@ -58,6 +98,7 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
     }).compile();
     app = module.createNestApplication();
     app.setGlobalPrefix('api/v1');
+    app.useGlobalInterceptors(new ApiResponseInterceptor());
     app.useGlobalPipes(
       new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
     );
@@ -65,6 +106,7 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
     jwt = module.get(JwtService);
   });
   afterAll(async () => {
+    globalThis.fetch = originalFetch;
     await app?.close();
   });
   const token = () =>
@@ -85,7 +127,67 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
     session.user.role = 'DRIVER';
     await request(http).post(path).set('Authorization', `Bearer ${token()}`).send(body).expect(403);
     session.user.role = 'CUSTOMER';
-    await request(http).post(path).set('Authorization', `Bearer ${token()}`).send(body).expect(200);
+    const response = await request(http)
+      .post(path)
+      .set('Authorization', `Bearer ${token()}`)
+      .send(body)
+      .expect(200);
+    const result = (response.body as { data: { latitude: number; longitude: number }[] }).data[0];
+    expect(typeof result.latitude).toBe('number');
+    expect(typeof result.longitude).toBe('number');
+    expect(result).toMatchObject({ latitude: 10.769508, longitude: 106.690795 });
+    const address = {
+      label: 'Home',
+      contactName: 'Test Customer',
+      phone: '0901234567',
+      streetAddress: '123 Street',
+      ward: 'Ben Thanh',
+      district: '',
+      city: 'Ho Chi Minh',
+      latitude: result.latitude,
+      longitude: result.longitude,
+    };
+    for (const method of ['post', 'patch'] as const) {
+      const target = method === 'post' ? '/api/v1/addresses' : '/api/v1/addresses/test-address';
+      const write = await request(http)
+        [method](target)
+        .set('Authorization', `Bearer ${token()}`)
+        .send(address)
+        .expect(method === 'post' ? 201 : 200);
+      expect((write.body as { data: unknown }).data).toMatchObject({
+        latitude: result.latitude,
+        longitude: result.longitude,
+      });
+      await request(http)
+        [method](target)
+        .set('Authorization', `Bearer ${token()}`)
+        .send({
+          ...address,
+          latitude: String(result.latitude),
+          longitude: String(result.longitude),
+        })
+        .expect(400);
+      // Pre-fix provider output was already numeric, but exceeded DTO precision.
+      const rejected = await request(http)
+        [method](target)
+        .set('Authorization', `Bearer ${token()}`)
+        .send({ ...address, latitude: 10.7695084, longitude: 106.6907953 })
+        .expect(400);
+      expect((rejected.body as { message: string[] }).message).toEqual(
+        expect.arrayContaining([
+          'latitude must be a number conforming to the specified constraints',
+          'longitude must be a number conforming to the specified constraints',
+        ]),
+      );
+    }
+    const reload = await request(http)
+      .get('/api/v1/addresses')
+      .set('Authorization', `Bearer ${token()}`)
+      .expect(200);
+    expect((reload.body as { data: unknown[] }).data[0]).toMatchObject({
+      latitude: result.latitude,
+      longitude: result.longitude,
+    });
     expect(search).toHaveBeenLastCalledWith({ street: '123 Nguyễn Trãi', city: 'Hồ Chí Minh' });
     for (let i = 0; i < 6; i++)
       await request(http)

@@ -1,4 +1,3 @@
-import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
@@ -58,7 +57,6 @@ export class CreateAddressDto {
 
   @ApiPropertyOptional({ example: 10.7769, minimum: -90, maximum: 90 })
   @IsOptional()
-  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(-90)
   @Max(90)
@@ -66,7 +64,6 @@ export class CreateAddressDto {
 
   @ApiPropertyOptional({ example: 106.7009, minimum: -180, maximum: 180 })
   @IsOptional()
-  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(-180)
   @Max(180)

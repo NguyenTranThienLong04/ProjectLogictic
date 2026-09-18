@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 import { build, preview } from 'vite';
 import { fileURLToPath } from 'node:url';
-const searchMode = process.argv.includes('--search');
+const directSearch = process.argv.includes('--direct-search');
+const searchMode = directSearch || process.argv.includes('--search');
 
 // Tests real page components and captured HTTP payloads; does not claim API/DB persistence.
 const config = {
@@ -33,7 +34,17 @@ try {
   let shipments = [];
   let searches = 0;
   let searchResponse = 'success';
-  const searchResult = { id: 'vn-1', displayName: '123 Nguyễn Trãi, Bến Thành, Hồ Chí Minh', latitude: 10.77, longitude: 106.69 };
+  // Matches the real backend normalization of raw "10.7695084", "106.6907953".
+  const searchResult = { id: 'vn-1', displayName: '123 Nguyễn Trãi, Bến Thành, Hồ Chí Minh', latitude: 10.769508, longitude: 106.690795 };
+  const numericPair = (body) => {
+    assert.equal(typeof body.latitude, 'number');
+    assert.equal(typeof body.longitude, 'number');
+    assert(Number.isFinite(body.latitude) && Number.isFinite(body.longitude));
+    if (directSearch) {
+      assert.equal(body.latitude, searchResult.latitude);
+      assert.equal(body.longitude, searchResult.longitude);
+    }
+  };
   const initialAddress = {
     id: '210e5c56-6639-46a3-98dd-dd6e3da0498d', label: 'Nhà', contactName: 'Nguyễn An', phone: '0901234567',
     streetAddress: '123 Nguyễn Trãi', city: 'Hồ Chí Minh', ward: 'Bến Thành', district: '',
@@ -55,14 +66,19 @@ try {
     else if (path.endsWith('/addresses') && request.method() === 'GET') data = addresses;
     else if (path.includes('/addresses') && ['POST', 'PATCH'].includes(request.method())) {
       const body = request.postDataJSON();
+      numericPair(body);
       writes.push({ method: request.method(), body });
       data = { ...initialAddress, ...body };
       addresses = [data];
     } else if (path.endsWith('/pricing/quote')) {
-      quotes.push(request.postDataJSON());
+      const body = request.postDataJSON();
+      if ('latitude' in body.delivery) numericPair(body.delivery);
+      quotes.push(body);
       data = { configVersion: 1, baseFee: 10000, weightFee: 0, codFee: 0, distanceFee: 0, surcharge: 0, discount: 0, totalFee: 10000 };
     } else if (path.endsWith('/shipments') && request.method() === 'POST') {
-      shipments.push(request.postDataJSON());
+      const body = request.postDataJSON();
+      numericPair(body.deliveryAddress);
+      shipments.push(body);
       data = { id: 'created' };
     } else throw new Error(`Unexpected fixture request: ${request.method()} ${path}`);
     await route.fulfill({ json: { data, meta: {} } });
@@ -94,6 +110,15 @@ try {
       await expect(page.locator('.leaflet-marker-draggable')).toHaveCount(1);
       await expect.poll(() => page.locator('.leaflet-tile[src*=".org/16/"]').count()).toBeGreaterThan(0);
       await expect(selectedText()).toHaveText(previous);
+      if (directSearch) {
+        // Do not click/drag the map: Leaflet would replace the provider draft.
+        // Rendering toFixed also fails at runtime if either draft field is a string.
+        await expect(page.locator('section[aria-label^="Vị trí"] > p[role="status"]').last())
+          .toHaveText('10.769508, 106.690795');
+        await confirm.click();
+        await expect(selectedText()).toHaveText('10.769508, 106.690795');
+        return;
+      }
       const marker = page.locator('.leaflet-marker-draggable');
       await marker.scrollIntoViewIfNeeded();
       const box = await marker.boundingBox();
@@ -102,7 +127,7 @@ try {
       await page.mouse.move(box.x + 50, box.y + 42, { steps: 8 });
       await page.mouse.up();
       const draft = await page.locator('section[aria-label^="Vị trí"] > p[role="status"]').last().textContent();
-      assert.notEqual(draft, '10.770000, 106.690000');
+      assert.notEqual(draft, '10.769508, 106.690795');
     } else await openMap();
     await map.click({ position: { x: 100, y: 120 } });
     await expect(confirm).toBeEnabled();
@@ -164,6 +189,7 @@ try {
     near([writes.at(-1).body.latitude, writes.at(-1).body.longitude], selected.split(',').map(Number));
     assert(!('confirmedAddressFingerprint' in writes.at(-1).body));
 
+    await open('/addresses'); // Reload via GET before editing the persisted fixture result.
     await page.getByRole('button', { name: 'Sửa', exact: true }).click();
     await expect(selectedText()).toHaveText(selected);
     await page.getByLabel('Tên người liên hệ').fill('Nguyễn Bình');
@@ -269,7 +295,7 @@ try {
     await page.waitForTimeout(400);
     await expect(page.getByRole('list', { name: 'Kết quả tìm địa chỉ' })).toHaveCount(0);
     await expect(map).toHaveCount(0);
-    console.log('PASS explicit search: typing 0, double-click 1, choice/draft/drag/confirm, all forms, stale payloads, fail/empty manual fallback, cancelled stale response');
+    console.log(`PASS explicit search: typing 0, double-click 1, ${directSearch ? 'direct numeric draft/confirm (no map adjustment)' : 'choice/draft/drag/confirm'}, all forms, numeric request payloads, reload, stale payloads, fail/empty manual fallback, cancelled stale response`);
   }
   assert.deepEqual(errors, []);
   assert.deepEqual(external, []);

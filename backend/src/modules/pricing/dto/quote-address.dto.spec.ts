@@ -26,6 +26,8 @@ describe('QuoteAddressDto coordinates', () => {
   });
 
   it.each([
+    { latitude: '10.878105', longitude: '106.810129' },
+    { latitude: 10.7695084, longitude: 106.6907953 },
     { latitude: 10, longitude: null },
     { latitude: null, longitude: 106 },
     { longitude: 106 },

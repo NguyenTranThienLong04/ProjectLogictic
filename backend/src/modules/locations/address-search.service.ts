@@ -23,7 +23,10 @@ const text = (value: unknown): string | undefined =>
 const coordinate = (value: unknown, max: number): number | undefined => {
   if (typeof value !== 'number' && !(typeof value === 'string' && value.trim())) return;
   const number = Number(value);
-  return Number.isFinite(number) && Math.abs(number) <= max ? number : undefined;
+  if (!Number.isFinite(number) || Math.abs(number) > max) return;
+  // Internal address DTOs accept six decimal places. Check the original range
+  // first so rounding cannot turn an invalid provider coordinate into a valid one.
+  return Number(number.toFixed(6));
 };
 
 @Injectable()
