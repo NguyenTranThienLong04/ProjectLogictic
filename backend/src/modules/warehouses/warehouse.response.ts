@@ -13,7 +13,11 @@ export const warehouseShipmentInclude = {
   currentWarehouse: { select: { id: true, code: true, name: true, city: true } },
   driverAssignments: {
     where: { type: 'PICKUP', status: 'COMPLETED' },
-    include: { driver: { include: { user: true } } },
+    include: {
+      driver: {
+        include: { user: { select: { id: true, fullName: true, phone: true } } },
+      },
+    },
     orderBy: { completedAt: 'desc' },
     take: 1,
   },

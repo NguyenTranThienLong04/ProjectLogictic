@@ -340,6 +340,53 @@ describe('WarehousesService', () => {
   });
 
   describe('checkIn', () => {
+    it('does not expose driver credentials or auth metadata from warehouse shipment reads', async () => {
+      prisma.warehouseStaffProfile.findUnique.mockResolvedValue({
+        userId: mockStaff.id,
+        warehouseId: 'wh-1',
+        isActive: true,
+      });
+      prisma.warehouse.findUnique.mockResolvedValue({ id: 'wh-1', isActive: true });
+      prisma.shipment.findFirst.mockResolvedValue({
+        id: 'shp-1',
+        trackingCode: 'SHP-TEST',
+        status: ShipmentStatus.PICKED_UP,
+        originWarehouseId: 'wh-1',
+        driverAssignments: [
+          {
+            id: 'assignment-1',
+            status: 'COMPLETED',
+            type: 'PICKUP',
+            driver: {
+              id: 'driver-1',
+              operatingWarehouseId: 'wh-1',
+              employeeCode: 'DRV-1',
+              user: {
+                id: 'driver-user-1',
+                fullName: 'Pickup Driver',
+                phone: '0900000000',
+                passwordHash: 'credential-canary',
+                refreshTokenHash: 'session-canary',
+                tokenVersion: 7,
+                passwordChangedAt: new Date(),
+              },
+            },
+          },
+        ],
+      });
+
+      const result = await service.lookupCheckInShipment('wh-1', 'SHP-TEST', mockStaff);
+
+      expect(result.driverAssignments?.[0]?.driver.user).toEqual({
+        id: 'driver-user-1',
+        fullName: 'Pickup Driver',
+        phone: '0900000000',
+      });
+      expect(JSON.stringify(result)).not.toMatch(
+        /password|token|credential-canary|session-canary/i,
+      );
+    });
+
     it('performs origin check-in for PICKED_UP shipment and verifies package', async () => {
       prisma.warehouseStaffProfile.findUnique.mockResolvedValue({
         userId: mockStaff.id,

@@ -1481,7 +1481,28 @@ export class WarehousesService {
       originWarehouse: shipment.originWarehouse,
       destinationWarehouse: shipment.destinationWarehouse,
       currentWarehouse: shipment.currentWarehouse,
-      driverAssignments: shipment.driverAssignments,
+      driverAssignments: shipment.driverAssignments?.map((assignment) => ({
+        id: assignment.id,
+        shipmentId: assignment.shipmentId,
+        driverId: assignment.driverId,
+        type: assignment.type,
+        status: assignment.status,
+        assignedAt: assignment.assignedAt,
+        acceptedAt: assignment.acceptedAt,
+        completedAt: assignment.completedAt,
+        driver: {
+          id: assignment.driver.id,
+          operatingWarehouseId: assignment.driver.operatingWarehouseId,
+          employeeCode: assignment.driver.employeeCode,
+          vehicleType: assignment.driver.vehicleType,
+          vehiclePlate: assignment.driver.vehiclePlate,
+          user: {
+            id: assignment.driver.user.id,
+            fullName: assignment.driver.user.fullName,
+            phone: assignment.driver.user.phone,
+          },
+        },
+      })),
     };
   }
 }

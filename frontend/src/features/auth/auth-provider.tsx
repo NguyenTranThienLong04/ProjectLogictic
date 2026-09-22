@@ -1,22 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { PropsWithChildren } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { refreshAuthSession } from '../../services/api';
-import {
-  getAuthSession,
-  subscribeToAuthSession,
-  updateAuthSession,
-} from '../../services/auth-session';
+import { subscribeWithAuthQueryCache } from '../../services/auth-query-cache';
+import { getAuthSession, updateAuthSession } from '../../services/auth-session';
 import type { AuthPayload } from '../../types/auth';
 import * as authRequests from './auth-api';
 import { AuthContext } from './auth-context';
 import type { AuthContextValue, AuthStatus } from './auth-context';
 
 export function AuthProvider({ children }: PropsWithChildren) {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<AuthPayload | null>(() => getAuthSession());
   const [ready, setReady] = useState(false);
   const status: AuthStatus = !ready ? 'loading' : session ? 'authenticated' : 'guest';
 
-  useEffect(() => subscribeToAuthSession(setSession), []);
+  useEffect(() => subscribeWithAuthQueryCache(queryClient, setSession), [queryClient]);
 
   useEffect(() => {
     let active = true;

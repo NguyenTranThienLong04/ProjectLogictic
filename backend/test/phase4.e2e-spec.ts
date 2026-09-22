@@ -544,6 +544,9 @@ describe('Phase 4 Warehouse Network flow (e2e)', () => {
       .set('Authorization', `Bearer ${staff1Token}`)
       .expect(200);
     expect(bodyFrom<{ trackingCode: string }>(lookupRes).data.trackingCode).toBe(trackingCode);
+    expect(JSON.stringify(lookupRes.body)).not.toMatch(
+      /passwordHash|refreshTokenHash|tokenVersion/,
+    );
 
     const checkInRes = await request(server)
       .post(`/api/v1/warehouses/${originWarehouseId}/check-in`)
@@ -556,6 +559,9 @@ describe('Phase 4 Warehouse Network flow (e2e)', () => {
       .expect(200);
 
     const body = bodyFrom<CheckInResponse>(checkInRes).data;
+    expect(JSON.stringify(checkInRes.body)).not.toMatch(
+      /passwordHash|refreshTokenHash|tokenVersion/,
+    );
     expect(body.idempotent).toBe(false);
     expect(body.shipment.status).toBe(ShipmentStatus.AT_ORIGIN_WAREHOUSE);
     expect(body.shipment.originWarehouseId).toBe(originWarehouseId);
@@ -574,6 +580,7 @@ describe('Phase 4 Warehouse Network flow (e2e)', () => {
       .send({ trackingCode, ...verification })
       .expect(200);
     expect(bodyFrom<CheckInResponse>(retryRes).data.idempotent).toBe(true);
+    expect(JSON.stringify(retryRes.body)).not.toMatch(/passwordHash|refreshTokenHash|tokenVersion/);
     expect(await prisma.trackingEvent.count({ where: { shipmentId } })).toBe(historyCount);
     expect(
       await prisma.auditLog.count({ where: { entityType: 'SHIPMENT', entityId: shipmentId } }),
@@ -583,6 +590,9 @@ describe('Phase 4 Warehouse Network flow (e2e)', () => {
       .get(`/api/v1/warehouses/${originWarehouseId}/shipments`)
       .set('Authorization', `Bearer ${staff1Token}`)
       .expect(200);
+    expect(JSON.stringify(inventoryRes.body)).not.toMatch(
+      /passwordHash|refreshTokenHash|tokenVersion/,
+    );
     expect(
       bodyFrom<{ items: Array<{ id: string }> }>(inventoryRes).data.items.some(
         (shipment) => shipment.id === shipmentId,
