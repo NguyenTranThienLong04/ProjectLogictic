@@ -23,6 +23,7 @@ export interface Paginated<T> {
 
 export async function listWarehouses<T extends WarehouseCatalogueItem = Warehouse>(params?: {
   city?: string;
+  ward?: string;
   isActive?: boolean;
   search?: string;
   page?: number;

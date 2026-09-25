@@ -27,6 +27,7 @@ import type { ReceiveTransferDto } from './dto/receive-transfer.dto.js';
 import type { RouteDestinationDto } from './dto/route-destination.dto.js';
 import type { UpdateWarehouseDto } from './dto/update-warehouse.dto.js';
 import type { WarehouseCheckInDto } from './dto/warehouse-check-in.dto.js';
+import { warehouseListWhere } from './warehouse-list-query.js';
 import { WarehouseTransferLifecycleService } from './warehouse-transfer-lifecycle.service.js';
 import {
   toWarehouseResponse,
@@ -249,23 +250,20 @@ export class WarehousesService {
 
   async listWarehouses(query: ListWarehousesDto, actor: AuthenticatedUser) {
     const staffWarehouseId = await this.resolveStaffWarehouseId(actor);
-    const search = query.search?.trim();
-    const where: Prisma.WarehouseWhereInput = {
-      ...(query.city ? { city: { contains: query.city.trim(), mode: 'insensitive' } } : {}),
-      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
-      ...(search
-        ? {
-            OR: [
-              { code: { contains: search, mode: 'insensitive' } },
-              { name: { contains: search, mode: 'insensitive' } },
-              { city: { contains: search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    };
-
+    const where = warehouseListWhere(query);
+    const [matches, counts] = await Promise.all([
+      this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+        SELECT "id" FROM "Warehouse" WHERE ${where}
+        ORDER BY "isActive" DESC, "code" ASC
+        LIMIT ${query.limit} OFFSET ${(query.page - 1) * query.limit}
+      `),
+      this.prisma.$queryRaw<{ total: bigint }[]>(Prisma.sql`
+        SELECT count(*) AS total FROM "Warehouse" WHERE ${where}
+      `),
+    ]);
+    const total = Number(counts[0].total);
     const items = await this.prisma.warehouse.findMany({
-      where,
+      where: { id: { in: matches.map((match) => match.id) } },
       include: {
         _count: {
           select: {
@@ -275,10 +273,7 @@ export class WarehousesService {
         },
       },
       orderBy: [{ isActive: 'desc' }, { code: 'asc' }],
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
     });
-    const total = await this.prisma.warehouse.count({ where });
 
     return {
       items: items.map((warehouse) =>

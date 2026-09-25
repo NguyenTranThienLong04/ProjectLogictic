@@ -106,6 +106,8 @@ export class DriversService {
       ? new Date(new Date(`${query.toDate}T00:00:00.000Z`).getTime() + 86_400_000)
       : undefined;
     const where: Prisma.DriverProfileWhereInput = {
+      ...(query.capability ? { capabilities: { has: query.capability } } : {}),
+      ...(query.operatingWarehouseId ? { operatingWarehouseId: query.operatingWarehouseId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.fromDate || toDateExclusive
         ? {

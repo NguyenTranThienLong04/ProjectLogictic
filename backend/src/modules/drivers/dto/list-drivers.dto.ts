@@ -6,13 +6,24 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
-import { DriverStatus } from '../../../generated/prisma/client.js';
+import { DriverCapability, DriverStatus } from '../../../generated/prisma/client.js';
 
 export class ListDriversDto {
+  @ApiPropertyOptional({ enum: DriverCapability })
+  @IsOptional()
+  @IsEnum(DriverCapability)
+  capability?: DriverCapability;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  operatingWarehouseId?: string;
+
   @ApiPropertyOptional({ enum: DriverStatus })
   @IsOptional()
   @IsEnum(DriverStatus)

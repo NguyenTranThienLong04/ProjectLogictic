@@ -97,6 +97,8 @@ export async function listDrivers(
     | DriverStatus
     | {
         status?: DriverStatus;
+        capability?: DriverCapability;
+        operatingWarehouseId?: string;
         search?: string;
         fromDate?: string;
         toDate?: string;

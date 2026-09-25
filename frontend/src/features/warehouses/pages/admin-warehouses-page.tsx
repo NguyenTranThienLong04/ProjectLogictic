@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
+import './admin-warehouses-page.css';
 import { Button } from '../../../components/ui/button';
 import { DataTable } from '../../../components/ui/data-table';
 import type { DataTableColumn } from '../../../components/ui/data-table';
@@ -14,6 +15,9 @@ import { FormField } from '../../../components/ui/form-field';
 import { LoadingState } from '../../../components/ui/loading-state';
 import { Modal } from '../../../components/ui/modal';
 import { PageHeader } from '../../../components/ui/page-header';
+import { Pagination } from '../../../components/ui/pagination';
+import { SearchableSelect } from '../../../components/ui/searchable-select';
+import { getProvinceWards, normalizeAdministrativeSearch, provinces } from '../../addresses/administrative-model';
 import { SelectField } from '../../../components/ui/select-field';
 import { getApiErrorMessage } from '../../../services/api-error';
 import type { User } from '../../../types/auth';
@@ -92,11 +96,35 @@ export function AdminWarehousesPage() {
   const [accountSearch, setAccountSearch] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedWarehouseForStaff, setSelectedWarehouseForStaff] = useState<Warehouse | null>(null);
+  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState({ search: '', province: '', ward: '', status: '', page: 1 });
+  const province = provinces.find((item) => item.code === filters.province);
+  const wardOptions = getProvinceWards(province?.code);
+  const ward = wardOptions.find((item) => item.code === filters.ward);
+  const hasFilters = Boolean(search || filters.province || filters.ward || filters.status);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setFilters((current) => current.search === search.trim() ? current : { ...current, search: search.trim(), page: 1 });
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
 
   const warehouses = useQuery({
-    queryKey: ['admin-warehouses'],
-    queryFn: () => listWarehouses(),
+    queryKey: ['admin-warehouses', filters],
+    queryFn: () => listWarehouses({
+      search: filters.search || undefined,
+      city: province?.name,
+      ward: ward?.name,
+      isActive: filters.status ? filters.status === 'true' : undefined,
+      page: filters.page,
+      limit: 20,
+    }),
   });
+
+  if (warehouses.data && filters.page > Math.max(1, warehouses.data.pagination.totalPages)) {
+    setFilters({ ...filters, page: Math.max(1, warehouses.data.pagination.totalPages) });
+  }
 
   const staffList = useQuery({
     queryKey: ['warehouse-staff', selectedWarehouseForStaff?.id],
@@ -302,15 +330,15 @@ export function AdminWarehousesPage() {
             <dl className="grid w-full grid-cols-2 gap-3 sm:w-auto">
               <div className="min-w-32 rounded-surface border border-border bg-surface px-4 py-3 shadow-surface">
                 <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  Tổng số kho
+                  Kho phù hợp
                 </dt>
                 <dd className="mt-1 text-2xl font-bold tabular-nums text-ink">
-                  {warehouses.isSuccess ? items.length : '—'}
+                  {warehouses.isSuccess ? warehouses.data.pagination.total : '—'}
                 </dd>
               </div>
               <div className="min-w-32 rounded-surface border border-border bg-surface px-4 py-3 shadow-surface">
                 <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  Đang hoạt động
+                  Đang mở trên trang
                 </dt>
                 <dd className="mt-1 text-2xl font-bold tabular-nums text-success">
                   {warehouses.isSuccess ? activeCount : '—'}
@@ -332,8 +360,8 @@ export function AdminWarehousesPage() {
           </p>
         ) : null}
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-start">
-          <section className="rounded-surface border border-border bg-surface p-5 shadow-surface lg:max-w-2xl xl:sticky xl:top-6 xl:max-w-none">
+        <div className="mt-6 grid gap-6 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] md:items-start xl:grid-cols-[22rem_minmax(0,1fr)]">
+          <section aria-label="Biểu mẫu kho hàng" className="min-w-0 rounded-surface border border-border bg-surface p-5 shadow-surface md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:overflow-x-hidden">
             <h2 className="text-lg font-semibold text-ink">{editingWarehouse ? 'Sửa kho hàng' : 'Thêm kho hàng mới'}</h2>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               Khai báo Hub trung chuyển hoặc kho đích mới trong mạng lưới.
@@ -391,13 +419,36 @@ export function AdminWarehousesPage() {
             </form>
           </section>
 
-          <section className="min-w-0" aria-labelledby="warehouse-list-title">
+          <section className="warehouse-list-results min-w-0" aria-labelledby="warehouse-list-title">
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-ink" id="warehouse-list-title">
                 Danh sách kho trong hệ thống
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Theo dõi trạng thái, tồn kho và nhân sự trên cùng một bảng vận hành.
+              </p>
+            </div>
+            <div className="mb-4 space-y-4 rounded-surface border border-border bg-surface p-4">
+              <FormField id="warehouse-search" label="Tìm kho" placeholder="Mã kho, tên kho hoặc địa chỉ" value={search} onChange={(event) => setSearch(event.target.value)} />
+              <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                <SearchableSelect label="Lọc tỉnh / thành phố" value={filters.province}
+                  placeholder="Tất cả tỉnh/thành" normalizeSearch={normalizeAdministrativeSearch}
+                  options={[{ value: '', label: 'Tất cả tỉnh/thành', searchText: '' }, ...provinces.map((item) => ({ value: item.code, label: item.name, searchText: item.name }))]}
+                  onChange={(value) => setFilters((current) => ({ ...current, province: value, ward: '', page: 1 }))} />
+                <SearchableSelect key={filters.province} label="Lọc phường / xã" value={filters.ward}
+                  placeholder={province ? 'Tất cả phường/xã' : 'Chọn tỉnh/thành trước'} disabled={!province} normalizeSearch={normalizeAdministrativeSearch}
+                  options={[{ value: '', label: 'Tất cả phường/xã', searchText: '' }, ...wardOptions.map((item) => ({ value: item.code, label: item.name, searchText: item.name }))]}
+                  onChange={(value) => setFilters((current) => ({ ...current, ward: value, page: 1 }))} />
+                <SelectField id="warehouse-status" label="Trạng thái kho" value={filters.status}
+                  onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value, page: 1 }))}>
+                  <option value="">Tất cả</option><option value="true">Đang mở</option><option value="false">Tạm dừng</option>
+                </SelectField>
+                <Button variant="secondary" className="self-end" disabled={!hasFilters} onClick={() => {
+                  setSearch(''); setFilters({ search: '', province: '', ward: '', status: '', page: 1 });
+                }}>Xóa bộ lọc</Button>
+              </div>
+              <p role="status" className="text-sm text-muted-foreground">
+                {warehouses.isPending ? 'Đang tìm kho…' : warehouses.isError ? 'Không thể tải số kho phù hợp.' : `${warehouses.data.pagination.total} kho phù hợp`}
               </p>
             </div>
             {toggleStatusMutation.isError ? (
@@ -408,8 +459,8 @@ export function AdminWarehousesPage() {
             <DataTable
               caption="Danh sách kho hàng"
               columns={columns}
-              emptyDescription="Thêm kho đầu tiên bằng biểu mẫu bên cạnh."
-              emptyTitle="Chưa có kho hàng"
+              emptyDescription={hasFilters ? 'Thử từ khóa khác hoặc xóa bộ lọc.' : 'Thêm kho đầu tiên bằng biểu mẫu bên cạnh.'}
+              emptyTitle={hasFilters ? 'Không có kho phù hợp' : 'Chưa có kho hàng'}
               error={warehouses.isError ? getApiErrorMessage(warehouses.error) : undefined}
               getRowKey={(warehouse) => warehouse.id}
               loading={warehouses.isPending}
@@ -417,6 +468,8 @@ export function AdminWarehousesPage() {
               onRetry={() => warehouses.refetch()}
               rows={items}
             />
+            {warehouses.data && <div className="mt-4"><Pagination page={filters.page} totalPages={warehouses.data.pagination.totalPages}
+              disabled={warehouses.isFetching} onPageChange={(page) => setFilters((current) => ({ ...current, page }))} /></div>}
           </section>
         </div>
 

@@ -14,10 +14,15 @@ import { ErrorSummary } from '../../components/ui/error-summary';
 import { FormField } from '../../components/ui/form-field';
 import { LoadingState } from '../../components/ui/loading-state';
 import { PageHeader } from '../../components/ui/page-header';
+import { Pagination } from '../../components/ui/pagination';
+import { SearchFilter } from '../../components/ui/search-filter';
+import { SearchableSelect } from '../../components/ui/searchable-select';
+import { Modal } from '../../components/ui/modal';
 import { SelectField } from '../../components/ui/select-field';
 import { getApiErrorMessage } from '../../services/api-error';
 import type { User } from '../../types/auth';
 import { listUsers } from '../admin/admin-api';
+import { normalizeAdministrativeSearch } from '../addresses/administrative-model';
 import { AccountLayout } from '../auth/components/account-layout';
 import { listWarehouses } from '../warehouses/warehouses-api';
 import {
@@ -32,12 +37,7 @@ import {
   filterDriverAccounts,
   getEligibleDriverAccounts,
 } from './driver-profile-candidates';
-import type {
-  DriverCapability,
-  DriverProfile,
-  DriverStatus,
-  Paginated,
-} from './operations-types';
+import type { DriverCapability, DriverProfile, DriverStatus, Paginated } from './operations-types';
 
 const schema = z.object({
   userId: z.uuid('Chọn tài khoản DRIVER'),
@@ -89,7 +89,9 @@ const capabilityPresentation: Record<DriverCapability, { className: string; labe
 function DriverStatusLabel({ status }: { status: DriverStatus }) {
   const presentation = driverStatusPresentation[status];
   return (
-    <span className={`inline-flex items-center gap-2 text-sm font-semibold ${presentation.text}`}>
+    <span
+      className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-sm font-semibold ${presentation.text}`}
+    >
       <span aria-hidden="true" className={`size-2 rounded-full ${presentation.dot}`} />
       {presentation.label}
     </span>
@@ -100,6 +102,16 @@ export function AdminDriversPage() {
   const queryClient = useQueryClient();
   const [accountSearch, setAccountSearch] = useState('');
   const [success, setSuccess] = useState('');
+  const [searchDraft, setSearchDraft] = useState('');
+  const [filters, setFilters] = useState({
+    search: '',
+    capability: '',
+    operatingWarehouseId: '',
+    status: '',
+    page: 1,
+  });
+  const [warehouseChange, setWarehouseChange] = useState<DriverProfile | null>(null);
+  const [warehouseId, setWarehouseId] = useState('');
   const [capabilityChange, setCapabilityChange] = useState<{
     driver: DriverProfile;
     enable: boolean;
@@ -108,14 +120,29 @@ export function AdminDriversPage() {
     driver: DriverProfile;
     suspended: boolean;
   } | null>(null);
-  const drivers = useQuery({ queryKey: ['drivers'], queryFn: () => listDrivers() });
+  const drivers = useQuery({
+    queryKey: ['drivers', 'admin-list', filters],
+    queryFn: () =>
+      listDrivers({
+        search: filters.search || undefined,
+        capability: (filters.capability || undefined) as DriverCapability | undefined,
+        operatingWarehouseId: filters.operatingWarehouseId || undefined,
+        status: (filters.status || undefined) as DriverStatus | undefined,
+        page: filters.page,
+        limit: 20,
+      }),
+  });
   const driverAccounts = useQuery({
     queryKey: ['driver-profile-candidates'],
     queryFn: listDriverProfileCandidates,
   });
   const warehouses = useQuery({
-    queryKey: ['warehouses', 'active-driver-operating-areas'],
-    queryFn: () => listWarehouses({ isActive: true, limit: 100 }),
+    queryKey: ['warehouses', 'driver-operating-areas'],
+    queryFn: () =>
+      collectPages(async (page) => {
+        const result = await listWarehouses({ page, limit: 100 });
+        return { items: result.items, ...result.pagination };
+      }),
   });
   const { control, formState, handleSubmit, register, reset, setValue } = useForm<DriverForm>({
     resolver: zodResolver(schema),
@@ -131,6 +158,7 @@ export function AdminDriversPage() {
   const createMutation = useMutation({
     mutationFn: createDriverProfile,
     onSuccess: async () => {
+      setFilters((current) => ({ ...current, page: 1 }));
       reset();
       setAccountSearch('');
       setSuccess('Đã tạo hồ sơ tài xế. Tài xế có thể đăng nhập và bật trạng thái nhận việc.');
@@ -143,6 +171,7 @@ export function AdminDriversPage() {
   const statusMutation = useMutation({
     mutationFn: setDriverSuspended,
     onSuccess: async (driver) => {
+      setFilters((current) => ({ ...current, page: 1 }));
       setSuspensionChange(null);
       setSuccess(
         driver.status === 'SUSPENDED'
@@ -155,6 +184,7 @@ export function AdminDriversPage() {
   const capabilityMutation = useMutation({
     mutationFn: setDriverCapabilities,
     onSuccess: async (driver) => {
+      setFilters((current) => ({ ...current, page: 1 }));
       setCapabilityChange(null);
       setSuccess(
         driver.capabilities.includes('LINE_HAUL')
@@ -171,6 +201,8 @@ export function AdminDriversPage() {
   const warehouseMutation = useMutation({
     mutationFn: setDriverOperatingWarehouse,
     onSuccess: async (driver) => {
+      setWarehouseChange(null);
+      setFilters((current) => ({ ...current, page: 1 }));
       setSuccess(`Đã cập nhật kho vận hành cho ${driver.fullName}.`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['drivers'] }),
@@ -180,6 +212,14 @@ export function AdminDriversPage() {
   });
 
   const candidateAccounts = driverAccounts.data ?? [];
+  const warehouseOptions = (warehouses.data ?? []).map((warehouse) => ({
+    value: warehouse.id,
+    label: `[${warehouse.code}] ${warehouse.name} — ${warehouse.city}`,
+    searchText: `${warehouse.code} ${warehouse.name} ${warehouse.city}`,
+  }));
+  const activeWarehouseOptions = warehouseOptions.filter((option) =>
+    warehouses.data?.some((warehouse) => warehouse.id === option.value && warehouse.isActive),
+  );
   const filteredAccounts = filterDriverAccounts(candidateAccounts, accountSearch);
   const profileFormDisabled =
     createMutation.isPending ||
@@ -188,16 +228,21 @@ export function AdminDriversPage() {
     candidateAccounts.length === 0 ||
     warehouses.isPending ||
     warehouses.isError ||
-    !warehouses.data?.items.length;
+    !activeWarehouseOptions.length;
   const rows = drivers.data?.items ?? [];
   const columns: DataTableColumn<DriverProfile>[] = [
     {
       id: 'driver',
       header: 'Tài xế',
       render: (driver) => (
-        <span className="block">
-          <span className="block font-semibold text-ink">{driver.fullName}</span>
-          <span className="mt-0.5 block wrap-anywhere text-xs text-muted-foreground">
+        <span className="block max-w-full lg:w-44">
+          <span title={driver.fullName} className="block truncate font-semibold text-ink">
+            {driver.fullName}
+          </span>
+          <span
+            title={driver.email}
+            className="mt-0.5 block truncate text-xs text-muted-foreground"
+          >
             {driver.email}
           </span>
         </span>
@@ -205,16 +250,21 @@ export function AdminDriversPage() {
     },
     {
       id: 'employeeCode',
-      header: 'Mã nhân viên',
+      header: 'Mã NV',
       render: (driver) => (
-        <span className="font-mono text-xs font-semibold text-primary">{driver.employeeCode}</span>
+        <span
+          title={driver.employeeCode}
+          className="block truncate font-mono text-xs font-semibold text-primary lg:w-24"
+        >
+          {driver.employeeCode}
+        </span>
       ),
     },
     {
       id: 'vehicle',
-      header: 'Phương tiện last-mile',
+      header: 'Phương tiện',
       render: (driver) => (
-        <span className="block">
+        <span className="block whitespace-nowrap">
           <span className="block font-medium text-ink">{driver.vehicleType}</span>
           <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
             {driver.vehiclePlate}
@@ -224,19 +274,19 @@ export function AdminDriversPage() {
     },
     {
       id: 'capabilities',
-      header: 'Năng lực vận hành',
+      header: 'Năng lực',
       render: (driver) => {
         const hasLineHaul = driver.capabilities.includes('LINE_HAUL');
         const pending =
           capabilityMutation.isPending && capabilityMutation.variables.driverId === driver.id;
         return (
-          <div className="min-w-48">
+          <div className="min-w-0 lg:min-w-48">
             <div className="flex flex-wrap gap-1.5">
               {driver.capabilities.map((capability) => {
                 const presentation = capabilityPresentation[capability];
                 return (
                   <span
-                    className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${presentation.className}`}
+                    className={`inline-flex shrink-0 whitespace-nowrap rounded-full border px-2 py-1 text-xs font-semibold ${presentation.className}`}
                     key={capability}
                   >
                     {presentation.label}
@@ -245,7 +295,7 @@ export function AdminDriversPage() {
               })}
             </div>
             <Button
-              className="mt-2 w-full md:w-auto"
+              className="mt-2 w-full whitespace-nowrap lg:w-auto"
               loading={pending}
               onClick={() => {
                 setSuccess('');
@@ -261,34 +311,39 @@ export function AdminDriversPage() {
     },
     {
       id: 'operatingWarehouse',
-      header: 'Kho vận hành / service area',
+      header: 'Kho vận hành',
       render: (driver) => {
         const busy =
           warehouseMutation.isPending && warehouseMutation.variables.driverId === driver.id;
         return (
-          <select
-            aria-label={`Kho vận hành của ${driver.fullName}`}
-            className="focus-ring min-h-11 w-full min-w-48 rounded-control border border-border bg-surface px-3 text-sm font-semibold text-ink disabled:cursor-not-allowed disabled:bg-surface-muted"
-            disabled={
-              driver.status === 'BUSY' || busy || warehouses.isPending || warehouses.isError
-            }
-            onChange={(event) =>
-              warehouseMutation.mutate({
-                driverId: driver.id,
-                operatingWarehouseId: event.target.value,
-              })
-            }
-            value={driver.operatingWarehouse?.id ?? ''}
-          >
-            <option disabled value="">
-              Chưa cấu hình
-            </option>
-            {warehouses.data?.items.map((warehouse) => (
-              <option key={warehouse.id} value={warehouse.id}>
-                {warehouse.code} · {warehouse.city}
-              </option>
-            ))}
-          </select>
+          <div className="min-w-0 lg:w-44">
+            <p className="truncate font-semibold" title={driver.operatingWarehouse?.name}>
+              {driver.operatingWarehouse?.name ?? 'Chưa cấu hình'}
+            </p>
+            <p
+              className="mt-1 truncate text-xs text-muted-foreground"
+              title={driver.operatingWarehouse?.code}
+            >
+              {driver.operatingWarehouse?.code}
+            </p>
+            <Button
+              className="mt-2 whitespace-nowrap"
+              variant="secondary"
+              disabled={
+                driver.status === 'BUSY' || busy || warehouses.isPending || warehouses.isError
+              }
+              onClick={() => {
+                warehouseMutation.reset();
+                setWarehouseId(driver.operatingWarehouse?.id ?? '');
+                setWarehouseChange(driver);
+              }}
+            >
+              Đổi kho
+            </Button>
+            {driver.status === 'BUSY' && (
+              <p className="mt-1 text-xs text-muted-foreground">Đang có công việc</p>
+            )}
+          </div>
         );
       },
     },
@@ -306,7 +361,7 @@ export function AdminDriversPage() {
         const busy = statusMutation.isPending && statusMutation.variables.driverId === driver.id;
         return (
           <Button
-            className="w-full md:w-auto"
+            className="w-full whitespace-nowrap lg:w-auto"
             disabled={driver.status === 'BUSY'}
             loading={busy}
             onClick={() => {
@@ -324,7 +379,7 @@ export function AdminDriversPage() {
 
   return (
     <AccountLayout>
-      <div className="mx-auto max-w-6xl">
+      <div className="min-w-0">
         <PageHeader
           description="Liên kết tài khoản DRIVER với hồ sơ vận hành, phương tiện và trạng thái khả dụng."
           eyebrow="Quản trị · Nhân sự vận hành"
@@ -349,8 +404,11 @@ export function AdminDriversPage() {
           </p>
         ) : null}
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-start">
-          <section className="rounded-surface border border-border bg-surface p-5 shadow-surface lg:max-w-xl xl:sticky xl:top-6 xl:max-w-none">
+        <div className="mt-6 grid items-start gap-6 md:grid-cols-[18rem_minmax(0,1fr)]">
+          <section
+            aria-label="Tạo hồ sơ tài xế"
+            className="min-w-0 rounded-surface border border-border bg-surface p-5 shadow-surface md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto"
+          >
             <h2 className="text-lg font-semibold text-ink">Tạo hồ sơ tài xế</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Chọn tài khoản DRIVER đang hoạt động và chưa được liên kết hồ sơ vận hành.
@@ -418,29 +476,16 @@ export function AdminDriversPage() {
                 control={control}
                 name="operatingWarehouseId"
                 render={({ field }) => (
-                  <SelectField
+                  <SearchableSelect
                     disabled={profileFormDisabled}
                     error={formState.errors.operatingWarehouseId?.message}
-                    helperText="Pickup dùng service area theo city; delivery phải khớp đúng kho đích."
-                    id="driver-operating-warehouse"
                     label="Kho vận hành"
-                    {...field}
-                  >
-                    <option value="">
-                      {warehouses.isPending
-                        ? 'Đang tải kho...'
-                        : warehouses.isError
-                          ? 'Không thể tải kho'
-                          : warehouses.data?.items.length
-                            ? 'Chọn kho vận hành'
-                            : 'Chưa có kho active'}
-                    </option>
-                    {warehouses.data?.items.map((warehouse) => (
-                      <option key={warehouse.id} value={warehouse.id}>
-                        {warehouse.code} · {warehouse.name} · {warehouse.city}
-                      </option>
-                    ))}
-                  </SelectField>
+                    placeholder="Tìm mã kho, tên hoặc tỉnh/TP"
+                    options={activeWarehouseOptions}
+                    normalizeSearch={normalizeAdministrativeSearch}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
                 )}
               />
               {driverAccounts.isPending ? (
@@ -476,7 +521,7 @@ export function AdminDriversPage() {
                   onRetry={() => warehouses.refetch()}
                   title="Không thể tải kho vận hành"
                 />
-              ) : warehouses.data.items.length === 0 ? (
+              ) : activeWarehouseOptions.length === 0 ? (
                 <EmptyState
                   compact
                   description="Tạo hoặc kích hoạt một warehouse trước khi tạo DriverProfile."
@@ -524,6 +569,100 @@ export function AdminDriversPage() {
                 Trạng thái khả dụng và phương tiện đang liên kết với từng tài khoản.
               </p>
             </div>
+            <div className="mb-4 space-y-3">
+              <SearchFilter
+                label="Tìm tài xế"
+                placeholder="Tên, email hoặc mã nhân viên"
+                value={searchDraft}
+                onChange={setSearchDraft}
+                onClear={() => {
+                  setSearchDraft('');
+                  setFilters((current) => ({ ...current, search: '', page: 1 }));
+                }}
+                onSubmit={() =>
+                  setFilters((current) => ({
+                    ...current,
+                    search: searchDraft.trim().slice(0, 100),
+                    page: 1,
+                  }))
+                }
+              >
+                <Button className="whitespace-nowrap" type="submit">
+                  Tìm kiếm
+                </Button>
+              </SearchFilter>
+              <div className="grid gap-3 xl:grid-cols-2">
+                <SelectField
+                  id="driver-capability-filter"
+                  label="Lọc năng lực"
+                  value={filters.capability}
+                  onChange={(event) =>
+                    setFilters((current) => ({
+                      ...current,
+                      capability: event.target.value,
+                      page: 1,
+                    }))
+                  }
+                >
+                  <option value="">Tất cả năng lực</option>
+                  <option value="PICKUP">Pickup / Lấy hàng</option>
+                  <option value="DELIVERY">Delivery / Giao hàng</option>
+                  <option value="LINE_HAUL">Line-haul / Tuyến liên kho</option>
+                </SelectField>
+                <SearchableSelect
+                  label="Lọc kho vận hành"
+                  placeholder="Tìm mã kho, tên hoặc tỉnh/TP"
+                  options={[
+                    { value: '', label: 'Tất cả kho', searchText: '' },
+                    ...warehouseOptions,
+                  ]}
+                  normalizeSearch={normalizeAdministrativeSearch}
+                  value={filters.operatingWarehouseId}
+                  disabled={warehouses.isPending || warehouses.isError}
+                  onChange={(value) =>
+                    setFilters((current) => ({ ...current, operatingWarehouseId: value, page: 1 }))
+                  }
+                />
+                <SelectField
+                  id="driver-status-filter"
+                  label="Lọc khả dụng"
+                  value={filters.status}
+                  onChange={(event) =>
+                    setFilters((current) => ({ ...current, status: event.target.value, page: 1 }))
+                  }
+                >
+                  <option value="">Tất cả trạng thái</option>
+                  {Object.entries(driverStatusPresentation).map(([value, presentation]) => (
+                    <option key={value} value={value}>
+                      {presentation.label}
+                    </option>
+                  ))}
+                </SelectField>
+                <Button
+                  className="self-end"
+                  variant="secondary"
+                  onClick={() => {
+                    setSearchDraft('');
+                    setFilters({
+                      search: '',
+                      capability: '',
+                      operatingWarehouseId: '',
+                      status: '',
+                      page: 1,
+                    });
+                  }}
+                >
+                  Xóa bộ lọc
+                </Button>
+              </div>
+              <p role="status" className="text-sm text-muted-foreground">
+                {drivers.isPending
+                  ? 'Đang tải tài xế…'
+                  : drivers.isError
+                    ? 'Không thể tải danh sách'
+                    : `${drivers.data.total} tài xế phù hợp`}
+              </p>
+            </div>
             {statusMutation.isError ? (
               <div className="mb-4">
                 <ErrorSummary message={getApiErrorMessage(statusMutation.error)} />
@@ -540,10 +679,11 @@ export function AdminDriversPage() {
               </div>
             ) : null}
             <DataTable
+              wide
               caption="Danh sách hồ sơ tài xế"
               columns={columns}
-              emptyDescription="Tạo hồ sơ đầu tiên bằng biểu mẫu bên cạnh."
-              emptyTitle="Chưa có hồ sơ tài xế"
+              emptyDescription="Thử thay đổi hoặc xóa bộ lọc, hoặc tạo hồ sơ mới."
+              emptyTitle="Không có tài xế phù hợp"
               error={drivers.isError ? getApiErrorMessage(drivers.error) : undefined}
               getRowKey={(driver) => driver.id}
               loading={drivers.isPending}
@@ -551,10 +691,57 @@ export function AdminDriversPage() {
               onRetry={() => drivers.refetch()}
               rows={rows}
             />
+            <div className="mt-4">
+              <Pagination
+                page={filters.page}
+                totalPages={drivers.data?.totalPages ?? 0}
+                disabled={drivers.isFetching}
+                onPageChange={(page) => setFilters((current) => ({ ...current, page }))}
+              />
+            </div>
           </section>
         </div>
       </div>
 
+      <Modal
+        open={Boolean(warehouseChange)}
+        title="Đổi kho vận hành"
+        description={warehouseChange?.fullName}
+        onClose={() => !warehouseMutation.isPending && setWarehouseChange(null)}
+        footer={
+          <Button
+            disabled={!warehouseId || warehouseId === warehouseChange?.operatingWarehouse?.id}
+            loading={warehouseMutation.isPending}
+            onClick={() => {
+              if (warehouseChange)
+                warehouseMutation.mutate({
+                  driverId: warehouseChange.id,
+                  operatingWarehouseId: warehouseId,
+                });
+            }}
+          >
+            Lưu kho vận hành
+          </Button>
+        }
+      >
+        <div className="min-h-80 space-y-4">
+          {warehouseMutation.isError && (
+            <ErrorSummary message={getApiErrorMessage(warehouseMutation.error)} />
+          )}
+          <SearchableSelect
+            label="Kho vận hành mới"
+            placeholder="Tìm mã kho, tên hoặc tỉnh/TP"
+            value={warehouseId}
+            onChange={setWarehouseId}
+            options={activeWarehouseOptions}
+            normalizeSearch={normalizeAdministrativeSearch}
+            disabled={warehouseMutation.isPending}
+          />
+          <p className="text-sm text-muted-foreground">
+            Không thể đổi kho khi tài xế đang có công việc đang thực hiện.
+          </p>
+        </div>
+      </Modal>
       <ConfirmDialog
         confirmLabel={capabilityChange?.enable ? 'Bật tuyến liên kho' : 'Gỡ capability'}
         description={

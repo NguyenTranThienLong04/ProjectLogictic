@@ -1,5 +1,7 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { jest } from '@jest/globals';
+import { validate } from 'class-validator';
+import { ListDriversDto } from './dto/list-drivers.dto.js';
 import { DriverStatus, UserRole, UserStatus } from '../../generated/prisma/client.js';
 import type { PrismaService } from '../../database/prisma.service.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
@@ -46,6 +48,149 @@ function profile(status: DriverStatus) {
 }
 
 describe('DriversService', () => {
+  it('validates optional filter enum and warehouse UUID', async () => {
+    expect(
+      await validate(
+        Object.assign(new ListDriversDto(), {
+          capability: 'DELIVERY',
+          operatingWarehouseId: driverUserId,
+        }),
+      ),
+    ).toHaveLength(0);
+    const errors = await validate(
+      Object.assign(new ListDriversDto(), {
+        capability: 'INVALID',
+        operatingWarehouseId: 'warehouse-code',
+      }),
+    );
+    expect(errors.map((error) => error.property).sort()).toEqual([
+      'capability',
+      'operatingWarehouseId',
+    ]);
+  });
+
+  it('creates the profile with its selected active warehouse and existing default capabilities', async () => {
+    const warehouse = {
+      id: '22222222-2222-4222-8222-222222222222',
+      code: 'WH-1',
+      name: 'Kho 1',
+      city: 'Hà Nội',
+    };
+    const created = {
+      ...profile(DriverStatus.OFFLINE),
+      capabilities: ['PICKUP', 'DELIVERY'],
+      operatingWarehouseId: warehouse.id,
+      operatingWarehouse: warehouse,
+    };
+    const transaction = {
+      user: { findUnique: jest.fn(() => Promise.resolve(created.user)) },
+      warehouse: { findFirst: jest.fn(() => Promise.resolve(warehouse)) },
+      driverProfile: { create: jest.fn(() => Promise.resolve(created)) },
+      auditLog: { create: jest.fn(() => Promise.resolve({})) },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (client: typeof transaction) => unknown) =>
+        callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const result = await new DriversService(prisma).create(
+      actor,
+      {
+        userId: driverUserId,
+        operatingWarehouseId: warehouse.id,
+        employeeCode: 'drv-001',
+        vehicleType: 'Motorbike',
+        vehiclePlate: '59A1-12345',
+      },
+      {},
+    );
+    expect(result.operatingWarehouse).toEqual(warehouse);
+    expect(transaction.driverProfile.create.mock.calls).toMatchObject([
+      [
+        {
+          data: {
+            operatingWarehouseId: warehouse.id,
+            capabilities: ['PICKUP', 'DELIVERY'],
+            employeeCode: 'DRV-001',
+            status: 'OFFLINE',
+          },
+        },
+      ],
+    ]);
+    expect(transaction.auditLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates an idle driver operating warehouse with optimistic version and audit', async () => {
+    const current = { ...profile(DriverStatus.OFFLINE), operatingWarehouseId: driverUserId };
+    const warehouse = {
+      id: '22222222-2222-4222-8222-222222222222',
+      code: 'WH-2',
+      name: 'Kho 2',
+      city: 'Đà Nẵng',
+    };
+    const updated = {
+      ...current,
+      operatingWarehouseId: warehouse.id,
+      operatingWarehouse: warehouse,
+      version: 1,
+    };
+    const transaction = {
+      driverProfile: {
+        findUnique: jest.fn(() => Promise.resolve(current)),
+        updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
+        findUniqueOrThrow: jest.fn(() => Promise.resolve(updated)),
+      },
+      driverAssignment: { count: jest.fn(() => Promise.resolve(0)) },
+      warehouse: { findFirst: jest.fn(() => Promise.resolve(warehouse)) },
+      auditLog: { create: jest.fn(() => Promise.resolve({})) },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (client: typeof transaction) => unknown) =>
+        callback(transaction),
+      ),
+    } as unknown as PrismaService;
+    const result = await new DriversService(prisma).update(
+      actor,
+      current.id,
+      { operatingWarehouseId: warehouse.id },
+      {},
+    );
+    expect(result.operatingWarehouse).toEqual(warehouse);
+    expect(transaction.driverProfile.updateMany).toHaveBeenCalledWith({
+      where: { id: current.id, version: 0 },
+      data: { operatingWarehouseId: warehouse.id, version: { increment: 1 } },
+    });
+    expect(transaction.auditLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('combines server-side search, capability, warehouse and status before pagination/count', async () => {
+    const findMany = jest.fn(() => Promise.resolve([]));
+    const count = jest.fn(() => Promise.resolve(23));
+    const prisma = { driverProfile: { findMany, count } } as unknown as PrismaService;
+    const result = await new DriversService(prisma).list({
+      search: '  driver  ',
+      capability: 'PICKUP',
+      operatingWarehouseId: driverUserId,
+      status: DriverStatus.AVAILABLE,
+      page: 2,
+      limit: 20,
+    });
+    const where = {
+      capabilities: { has: 'PICKUP' },
+      operatingWarehouseId: driverUserId,
+      status: DriverStatus.AVAILABLE,
+      OR: [
+        { employeeCode: { contains: 'driver', mode: 'insensitive' } },
+        { vehiclePlate: { contains: 'driver', mode: 'insensitive' } },
+        { user: { fullName: { contains: 'driver', mode: 'insensitive' } } },
+        { user: { email: { contains: 'driver', mode: 'insensitive' } } },
+      ],
+    };
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where, skip: 20, take: 20 }));
+    expect(count).toHaveBeenCalledWith({ where });
+    expect(result).toMatchObject({ total: 23, totalPages: 2, page: 2 });
+  });
+
   it('prevents a suspended profile from becoming available', async () => {
     const transaction = {
       driverProfile: {

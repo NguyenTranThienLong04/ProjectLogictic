@@ -10,6 +10,11 @@ export class ListWarehousesDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  ward?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @Transform(({ value }) => {
     if (value === 'true' || value === true) return true;
     if (value === 'false' || value === false) return false;
@@ -18,7 +23,7 @@ export class ListWarehousesDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ description: 'Search by warehouse code or name' })
+  @ApiPropertyOptional({ description: 'Search by warehouse code, name or address' })
   @IsOptional()
   @IsString()
   search?: string;

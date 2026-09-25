@@ -1,0 +1,40 @@
+/* This list shares the viewport with the form: adapt to its own available width. */
+.warehouse-list-results {
+  container-type: inline-size;
+}
+
+@container (width < 42rem) {
+  .warehouse-list-results table {
+    display: block;
+  }
+
+  .warehouse-list-results thead {
+    display: none;
+  }
+
+  .warehouse-list-results tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .warehouse-list-results tbody tr {
+    display: grid;
+    gap: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-surface);
+    background: var(--color-surface);
+    padding: 1rem;
+  }
+
+  .warehouse-list-results td {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+    border: 0;
+    padding: 0.25rem 0;
+  }
+
+  .warehouse-list-results td > span[aria-hidden='true'] {
+    display: block;
+  }
+}

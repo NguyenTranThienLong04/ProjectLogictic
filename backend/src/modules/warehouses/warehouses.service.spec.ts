@@ -1036,7 +1036,9 @@ describe('WarehousesService', () => {
         warehouse('wh-1', 'WH-1'),
         warehouse('wh-2', 'WH-2'),
       ]);
-      prisma.warehouse.count.mockResolvedValue(2);
+      prisma.$queryRaw
+        .mockResolvedValueOnce([{ id: 'wh-1' }, { id: 'wh-2' }])
+        .mockResolvedValueOnce([{ total: 2n }]);
 
       const result = await service.listWarehouses({ page: 1, limit: 20 }, mockStaff);
 
