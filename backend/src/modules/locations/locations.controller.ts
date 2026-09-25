@@ -35,7 +35,7 @@ export class LocationsController {
   ) {}
 
   @Post('locations/address-search')
-  @Roles(UserRole.CUSTOMER)
+  @Roles(UserRole.CUSTOMER, UserRole.ADMIN)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Search Vietnamese addresses for explicit map selection' })

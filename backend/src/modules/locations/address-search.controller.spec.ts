@@ -126,7 +126,7 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
       .expect(400);
     session.user.role = 'DRIVER';
     await request(http).post(path).set('Authorization', `Bearer ${token()}`).send(body).expect(403);
-    session.user.role = 'CUSTOMER';
+    session.user.role = 'ADMIN';
     const response = await request(http)
       .post(path)
       .set('Authorization', `Bearer ${token()}`)
@@ -136,6 +136,7 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
     expect(typeof result.latitude).toBe('number');
     expect(typeof result.longitude).toBe('number');
     expect(result).toMatchObject({ latitude: 10.769508, longitude: 106.690795 });
+    session.user.role = 'CUSTOMER';
     const address = {
       label: 'Home',
       contactName: 'Test Customer',

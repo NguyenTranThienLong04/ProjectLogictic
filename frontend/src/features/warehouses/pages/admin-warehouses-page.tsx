@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { Button } from '../../../components/ui/button';
@@ -22,6 +22,7 @@ import { AccountLayout } from '../../auth/components/account-layout';
 import {
   assignWarehouseStaff,
   createWarehouse,
+  updateWarehouse,
   listWarehouses,
   listWarehouseStaff,
   toggleStaffStatus,
@@ -34,23 +35,9 @@ import {
 } from '../warehouse-staff-candidates';
 import type { Warehouse } from '../warehouse-types';
 
-const createWarehouseSchema = z.object({
-  code: z
-    .string()
-    .trim()
-    .min(2, 'Tối thiểu 2 ký tự')
-    .max(32)
-    .regex(/^[A-Z0-9_-]+$/, 'Mã kho chỉ gồm chữ HOA, số, gạch ngang hoặc gạch dưới'),
-  name: z.string().trim().min(2, 'Tên kho tối thiểu 2 ký tự').max(100),
-  address: z.string().trim().min(5, 'Địa chỉ chi tiết tối thiểu 5 ký tự').max(255),
-  ward: z.string().trim().optional(),
-  district: z.string().trim().optional(),
-  city: z.string().trim().min(2, 'Tên thành phố tối thiểu 2 ký tự').max(100),
-  latitude: z.string().optional(),
-  longitude: z.string().optional(),
-});
-
-type CreateWarehouseForm = z.infer<typeof createWarehouseSchema>;
+import { AdministrativeAddressFields } from '../../addresses/administrative-address-fields';
+import { LocationPicker } from '../../locations/location-picker';
+import { emptyWarehouseForm, warehouseFormSchema, warehouseFormInput, warehouseFormValues, warehouseAddressContext, type WarehouseFormValues } from '../warehouse-form';
 
 const assignStaffSchema = z.object({
   userId: z.uuid('Chọn tài khoản WAREHOUSE_STAFF'),
@@ -101,6 +88,7 @@ async function listAllWarehouseStaffAccounts(): Promise<User[]> {
 
 export function AdminWarehousesPage() {
   const queryClient = useQueryClient();
+  const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
   const [accountSearch, setAccountSearch] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedWarehouseForStaff, setSelectedWarehouseForStaff] = useState<Warehouse | null>(null);
@@ -122,11 +110,11 @@ export function AdminWarehousesPage() {
     enabled: Boolean(selectedWarehouseForStaff),
   });
 
-  const { formState: whFormState, handleSubmit: handleWhSubmit, register: registerWh, reset: resetWh } =
-    useForm<CreateWarehouseForm>({
-      resolver: zodResolver(createWarehouseSchema),
+  const { formState: whFormState, handleSubmit: handleWhSubmit, register: registerWh, reset: resetWh, control: whControl, setValue: setWhValue } =
+    useForm<WarehouseFormValues>({
+      resolver: zodResolver(warehouseFormSchema),
       mode: 'onBlur',
-      defaultValues: { code: '', name: '', address: '', ward: '', district: '', city: 'Hà Nội', latitude: '', longitude: '' },
+      defaultValues: emptyWarehouseForm,
     });
 
   const {
@@ -143,20 +131,14 @@ export function AdminWarehousesPage() {
     });
 
   const createMutation = useMutation({
-    mutationFn: (values: CreateWarehouseForm) =>
-      createWarehouse({
-        code: values.code,
-        name: values.name,
-        address: values.address,
-        ward: values.ward || undefined,
-        district: values.district || undefined,
-        city: values.city,
-        latitude: values.latitude ? Number(values.latitude) : undefined,
-        longitude: values.longitude ? Number(values.longitude) : undefined,
-      }),
+    mutationFn: (values: WarehouseFormValues) => {
+      const { code, ...input } = warehouseFormInput(values);
+      return editingWarehouse ? updateWarehouse(editingWarehouse.id, input) : createWarehouse({ code, ...input });
+    },
     onSuccess: async (created) => {
-      resetWh();
-      setSuccess(`Đã tạo kho hàng "${created.name}" (${created.code}) thành công.`);
+      resetWh(emptyWarehouseForm);
+      setEditingWarehouse(null);
+      setSuccess(`Đã lưu kho hàng "${created.name}" (${created.code}) thành công.`);
       await queryClient.invalidateQueries({ queryKey: ['admin-warehouses'] });
     },
   });
@@ -189,6 +171,9 @@ export function AdminWarehousesPage() {
       ]);
     },
   });
+
+  const warehouseValues = useWatch({ control: whControl, defaultValue: emptyWarehouseForm });
+  const warehouseContext = warehouseAddressContext({ ...emptyWarehouseForm, ...warehouseValues });
 
   const candidateAccounts = staffAccounts.data ?? [];
   const filteredAccounts = filterWarehouseStaffAccounts(candidateAccounts, accountSearch);
@@ -277,6 +262,12 @@ export function AdminWarehousesPage() {
           toggleStatusMutation.isPending && toggleStatusMutation.variables === warehouse.id;
         return (
           <span className="flex flex-col gap-2 md:items-end">
+            <Button variant="secondary" disabled={createMutation.isPending} onClick={() => {
+              setEditingWarehouse(warehouse);
+              resetWh(warehouseFormValues(warehouse));
+              createMutation.reset();
+              document.getElementById('wh-name')?.focus();
+            }}>Sửa kho</Button>
             <Button
               className="w-full md:w-auto"
               onClick={() => {
@@ -343,7 +334,7 @@ export function AdminWarehousesPage() {
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-start">
           <section className="rounded-surface border border-border bg-surface p-5 shadow-surface lg:max-w-2xl xl:sticky xl:top-6 xl:max-w-none">
-            <h2 className="text-lg font-semibold text-ink">Thêm kho hàng mới</h2>
+            <h2 className="text-lg font-semibold text-ink">{editingWarehouse ? 'Sửa kho hàng' : 'Thêm kho hàng mới'}</h2>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               Khai báo Hub trung chuyển hoặc kho đích mới trong mạng lưới.
             </p>
@@ -357,6 +348,7 @@ export function AdminWarehousesPage() {
               />
               <FormField
                 error={whFormState.errors.code?.message}
+                disabled={Boolean(editingWarehouse)}
                 id="wh-code"
                 label="Mã kho (viết hoa)"
                 placeholder="WH-HAN-01"
@@ -369,56 +361,32 @@ export function AdminWarehousesPage() {
                 placeholder="Kho Trung Chuyển Hà Nội"
                 {...registerWh('name')}
               />
-              <FormField
-                error={whFormState.errors.city?.message}
-                id="wh-city"
-                label="Tỉnh / Thành phố"
-                placeholder="Hà Nội"
-                {...registerWh('city')}
-              />
-              <FormField
-                error={whFormState.errors.district?.message}
-                id="wh-district"
-                label="Quận / Huyện (tuỳ chọn)"
-                placeholder="Cầu Giấy"
-                {...registerWh('district')}
-              />
-              <FormField
-                error={whFormState.errors.ward?.message}
-                id="wh-ward"
-                label="Phường / Xã (tuỳ chọn)"
-                placeholder="Dịch Vọng"
-                {...registerWh('ward')}
-              />
-              <FormField
-                error={whFormState.errors.address?.message}
-                id="wh-address"
-                label="Địa chỉ chi tiết"
-                placeholder="Số 123 Đường Cầu Giấy"
-                {...registerWh('address')}
-              />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <FormField
-                  error={whFormState.errors.latitude?.message}
-                  id="wh-lat"
-                  label="Vĩ độ (Lat)"
-                  placeholder="21.028"
-                  type="number"
-                  step="any"
-                  {...registerWh('latitude')}
-                />
-                <FormField
-                  error={whFormState.errors.longitude?.message}
-                  id="wh-lng"
-                  label="Kinh độ (Lng)"
-                  placeholder="105.804"
-                  type="number"
-                  step="any"
-                  {...registerWh('longitude')}
-                />
-              </div>
+              <AdministrativeAddressFields city={warehouseValues.city} ward={warehouseValues.ward}
+                cityError={whFormState.errors.city?.message} wardError={whFormState.errors.ward?.message}
+                disabled={createMutation.isPending} onChange={(next) => {
+                  setWhValue('city', next.city, { shouldDirty: true });
+                  setWhValue('ward', next.ward, { shouldDirty: true });
+                  setWhValue('district', next.district, { shouldDirty: true });
+                }} />
+              {warehouseValues.district && <p className="text-sm text-muted-foreground">Quận/huyện cũ: {warehouseValues.district}</p>}
+              <FormField error={whFormState.errors.address?.message} id="wh-address"
+                label="Số nhà / tên đường" {...registerWh('address')} />
+              <LocationPicker label="Vị trí kho hàng" addressContext={warehouseContext}
+                disabled={createMutation.isPending}
+                value={warehouseValues.latitude !== undefined && warehouseValues.longitude !== undefined
+                  ? { latitude: warehouseValues.latitude, longitude: warehouseValues.longitude } : undefined}
+                confirmedAddressFingerprint={warehouseValues.confirmedAddressFingerprint}
+                onChange={(point, fingerprint) => {
+                  setWhValue('latitude', point.latitude, { shouldDirty: true });
+                  setWhValue('longitude', point.longitude, { shouldDirty: true });
+                  setWhValue('confirmedAddressFingerprint', fingerprint, { shouldDirty: true, shouldValidate: true });
+                }} />
+              {whFormState.errors.confirmedAddressFingerprint && <p role="alert" className="text-sm text-danger">{whFormState.errors.confirmedAddressFingerprint.message}</p>}
+              {editingWarehouse && <Button variant="secondary" disabled={createMutation.isPending} onClick={() => {
+                setEditingWarehouse(null); resetWh(emptyWarehouseForm); createMutation.reset();
+              }}>Hủy sửa</Button>}
               <Button className="w-full" loading={createMutation.isPending} type="submit">
-                Tạo kho hàng
+                {editingWarehouse ? 'Lưu thay đổi' : 'Tạo kho hàng'}
               </Button>
             </form>
           </section>

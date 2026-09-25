@@ -240,6 +240,27 @@ describe('WarehousesService', () => {
   });
 
   describe('atomic admin mutations', () => {
+    it.each(['address', 'ward', 'district', 'city'])(
+      'blocks %s edits without reconfirmed coordinates',
+      async (field) => {
+        prisma.warehouse.findUnique.mockResolvedValue({
+          id: 'wh-1',
+          address: 'Old street',
+          ward: 'Old ward',
+          district: '',
+          city: 'Hanoi',
+          latitude: 21,
+          longitude: 105,
+          version: 1,
+        });
+        await expect(
+          service.updateWarehouse('wh-1', { [field]: 'Changed address' }, mockAdmin, mockContext),
+        ).rejects.toMatchObject({ response: { code: 'WAREHOUSE_LOCATION_REQUIRED' } });
+        expect(prisma.warehouse.updateMany).not.toHaveBeenCalled();
+        expect(prisma.auditLog.create).not.toHaveBeenCalled();
+      },
+    );
+
     it('updates a warehouse and its audit record in one transaction', async () => {
       prisma.warehouse.findUnique.mockResolvedValue({
         id: 'wh-1',

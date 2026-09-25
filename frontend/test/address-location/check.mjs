@@ -29,6 +29,8 @@ try {
   });
   await page.route('**/*.tile.openstreetmap.org/**', (route) => route.abort());
   let addresses = [];
+  let warehouses = [];
+  const warehouseWrites = [];
   const writes = [];
   let quotes = [];
   let shipments = [];
@@ -62,6 +64,14 @@ try {
       if (searchResponse === 'error') { await route.fulfill({ status: 503, json: { message: 'Unavailable' } }); return; }
       data = searchResponse === 'empty' ? [] : [searchResult, { ...searchResult, id: 'vn-2', displayName: 'Kết quả thứ hai' }];
     }
+    else if (path.includes('/warehouses') && ['POST', 'PATCH'].includes(request.method())) {
+      const body = request.postDataJSON();
+      numericPair(body);
+      warehouseWrites.push(body);
+      data = { id: 'warehouse-test', isActive: true, ...warehouses[0], ...body };
+      warehouses = [data];
+    }
+    else if (path.endsWith('/warehouses')) data = { items: warehouses, pagination: { page: 1, totalPages: 1, total: warehouses.length } };
     else if (path.endsWith('/notifications')) data = { items: [], unreadCount: 0, total: 0 };
     else if (path.endsWith('/addresses') && request.method() === 'GET') data = addresses;
     else if (path.includes('/addresses') && ['POST', 'PATCH'].includes(request.method())) {
@@ -150,6 +160,55 @@ try {
 
   for (const size of [{ width: 375, height: 812 }, { width: 812, height: 375 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(size);
+    warehouses = [];
+    await open('/admin/warehouses');
+    await expect(ward).toBeDisabled();
+    await page.getByLabel('Mã kho (viết hoa)').fill('WH-TEST');
+    await page.getByLabel('Tên kho hàng', { exact: true }).fill('Kho kiểm thử');
+    await choose(city, 'ho chi minh', 'Hồ Chí Minh');
+    await choose(ward, 'ben thanh', 'Bến Thành');
+    const beforeTyping = searches;
+    for (let i = 0; i < 10; i++) await page.getByLabel('Số nhà / tên đường').fill(`${i} Nguyễn Trãi`);
+    await page.getByLabel('Số nhà / tên đường').fill('123 Nguyễn Trãi');
+    assert.equal(searches, beforeTyping);
+    const beforeCreate = warehouseWrites.length;
+    await page.getByRole('button', { name: 'Tạo kho hàng', exact: true }).click();
+    await expect(page.getByText('Vui lòng chọn và xác nhận vị trí trên bản đồ.', { exact: true })).toBeVisible();
+    assert.equal(warehouseWrites.length, beforeCreate);
+    await pin();
+    if ([375, 1440].includes(size.width)) {
+      await page.locator('form').first().screenshot({ path: `frontend/.vite/address-location/warehouse-${size.width}.png` });
+    }
+    await page.getByRole('button', { name: 'Tạo kho hàng', exact: true }).click();
+    await expect.poll(() => warehouseWrites.length).toBe(beforeCreate + 1);
+    assert.equal(warehouseWrites.at(-1).district, '');
+    await open('/admin/warehouses');
+    await page.getByRole('button', { name: 'Sửa kho', exact: true }).click();
+    const savedCoordinate = `${warehouses[0].latitude.toFixed(6)}, ${warehouses[0].longitude.toFixed(6)}`;
+    await expect(selectedText()).toHaveText(savedCoordinate);
+    await openMap();
+    await expect(page.locator('section[aria-label^="Vị trí"] > p[role="status"]').last()).toHaveText(savedCoordinate);
+    await page.locator('section[aria-label^="Vị trí"]').getByRole('button', { name: 'Hủy', exact: true }).click();
+    await page.getByLabel('Tên kho hàng', { exact: true }).fill('Kho đổi tên');
+    await page.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click();
+    await expect.poll(() => warehouseWrites.length).toBe(beforeCreate + 2);
+    await page.getByRole('button', { name: 'Sửa kho', exact: true }).click();
+    await page.getByLabel('Số nhà / tên đường').fill('456 Nguyễn Trãi');
+    await expect(stale()).toBeVisible();
+    await page.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click();
+    assert.equal(warehouseWrites.length, beforeCreate + 2);
+    await choose(ward, 'sai gon', 'Sài Gòn');
+    await expect(stale()).toBeVisible();
+    await pin();
+    await page.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click();
+    await expect.poll(() => warehouseWrites.length).toBe(beforeCreate + 3);
+    await page.getByRole('button', { name: 'Sửa kho', exact: true }).click();
+    await choose(city, 'ha noi', 'Hà Nội');
+    await expect(ward).toHaveValue('');
+    await expect(stale()).toBeVisible();
+    assert.equal(await page.locator('input[name="latitude"], input[name="longitude"], input[name="city"], input[name="ward"], input[name="district"]').count(), 0);
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    console.log(`PASS Warehouse ${size.width}x${size.height}: create, edit/reload, metadata preservation, stale blocking, province reset, no manual coordinate inputs/overflow`);
     addresses = [];
     await open('/addresses');
     await expect(ward).toBeDisabled();

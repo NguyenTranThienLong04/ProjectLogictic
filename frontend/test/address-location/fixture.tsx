@@ -6,6 +6,7 @@ import { AuthContext, type AuthContextValue } from '../../src/features/auth/auth
 import { AddressesPage } from '../../src/features/addresses/addresses-page';
 import { CreateShipmentPage } from '../../src/features/shipments/create-shipment-page';
 import { QuotePage } from '../../src/features/pricing/quote-page';
+import { AdminWarehousesPage } from '../../src/features/warehouses/pages/admin-warehouses-page';
 import '../../src/styles.css';
 
 const unavailable = async () => { throw new Error('Auth actions are outside this fixture'); };
@@ -17,9 +18,11 @@ const auth: AuthContextValue = {
 };
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const page = new URLSearchParams(location.search).get('screen') ?? '/addresses';
+if (page === '/admin/warehouses' && auth.user) auth.user.role = 'ADMIN';
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={client}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={[page]}>
     <Routes>
+      <Route path="/admin/warehouses" element={<AdminWarehousesPage />} />
       <Route path="/addresses" element={<AddressesPage />} />
       <Route path="/shipments/new" element={<CreateShipmentPage />} />
       <Route path="/quote" element={<QuotePage />} />

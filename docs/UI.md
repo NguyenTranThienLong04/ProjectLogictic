@@ -36,7 +36,9 @@ SearchFilter · NotificationBell · Timeline · Map
 - Interaction canonical: **Chọn vị trí trên bản đồ → click map → marker → drag chỉnh vị trí → Xác nhận vị trí → readonly selected coordinate → Thay đổi vị trí**. Hủy giữ giá trị đã xác nhận. Main form không có trường latitude/longitude chỉnh tay; delivery location vẫn tùy chọn theo DOMAIN.
 - Dùng semantic tokens, layout responsive, loading/error text và retry bằng đóng/mở picker. Keyboard: focus bản đồ, phím mũi tên pan, Enter chọn tâm; click map là phương án thay thế drag. Không dùng chuyển động bản đồ bắt buộc; giữ label, focus và trạng thái disabled của shared Button.
 
-### Address selectors (Saved Address / Create Shipment / Quote)
+### Address selectors (Saved Address / Create Shipment / Quote / Admin Warehouse)
+
+- Canonical rule: **Administrative locality = select from canonical dataset; Street/house = explicit geocode search + selected result/manual pin; Coordinate = map/provider generated, never manually typed.** Warehouse create/edit uses the same `AdministrativeAddressFields` and `LocationPicker` as Customer forms. New warehouse and address edits require a current confirmed pin; name-only edits preserve legacy address/geo. Legacy district is read-only; selecting a new hierarchy clears it. Audit inventory, exceptions and verification: `docs/ADDRESS_UI_AUDIT.md`.
 
 - Dùng chung `AdministrativeAddressFields` + `SearchableSelect` + `administrative-model.ts`. Province chỉ chọn từ 34 mục canonical; ward chỉ bật sau province, filter theo province, reset khi đổi province. Search có/không dấu, không cho commit arbitrary text; keyboard Arrow/Enter/Escape, label/listbox/disabled/error/empty states rõ ràng. Số nhà/tên đường giữ text input.
 - JSON tĩnh 34 tỉnh/thành + 3.321 xã/phường/đặc khu, snapshot theo Quyết định 19/2025. Source/version/license/checksum/update procedure ở `frontend/src/features/addresses/data/README.md` và `SOURCE.json`; upstream license CC BY 4.0, tọa độ ward có nguồn OSM/ODbL. UI có attribution. Không fetch administrative API/GitHub/Nominatim lúc mở form hoặc gõ tìm kiếm.

@@ -123,6 +123,17 @@ export class WarehousesService {
         });
       }
 
+      const addressChanged = (['address', 'ward', 'district', 'city'] as const).some(
+        (field) =>
+          dto[field] !== undefined && (dto[field]?.trim() || '') !== (existing[field] || ''),
+      );
+      if (addressChanged && (dto.latitude == null || dto.longitude == null)) {
+        throw new BadRequestException({
+          code: 'WAREHOUSE_LOCATION_REQUIRED',
+          message: 'Confirm a new location when changing the warehouse address',
+        });
+      }
+
       const update = await transaction.warehouse.updateMany({
         where: { id, version: existing.version },
         data: {

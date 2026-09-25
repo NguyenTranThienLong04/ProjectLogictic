@@ -285,6 +285,36 @@ describe('Phase 4 Warehouse Network flow (e2e)', () => {
     const originBody = bodyFrom<{ id: string; code: string }>(originRes);
     originWarehouseId = originBody.data.id;
     expect(originWarehouseId).toBeDefined();
+    await request(server)
+      .patch(`/api/v1/warehouses/${originWarehouseId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ address: '456 Đường Cầu Giấy' })
+      .expect(400);
+    const canonicalUpdate = {
+      address: '456 Đường Cầu Giấy',
+      ward: 'Cầu Giấy',
+      district: '',
+      city: 'Hà Nội',
+      latitude: 21.028512,
+      longitude: 105.804818,
+    };
+    await request(server)
+      .patch(`/api/v1/warehouses/${originWarehouseId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(canonicalUpdate)
+      .expect(200);
+    const reloaded = await request(server)
+      .get(`/api/v1/warehouses/${originWarehouseId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(bodyFrom<Record<string, unknown>>(reloaded).data).toMatchObject({
+      ...canonicalUpdate,
+      district: null,
+    });
+    const stored = await prisma.warehouse.findUniqueOrThrow({ where: { id: originWarehouseId } });
+    expect(Number(stored.latitude)).toBe(canonicalUpdate.latitude);
+    expect(Number(stored.longitude)).toBe(canonicalUpdate.longitude);
+
     await prisma.driverProfile.update({
       where: { id: driverProfileId },
       data: { operatingWarehouseId: originWarehouseId },

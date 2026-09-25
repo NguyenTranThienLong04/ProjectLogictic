@@ -3,6 +3,9 @@ import {
   IsBoolean,
   IsNotEmpty,
   IsNumber,
+  Min,
+  Max,
+  ValidateIf,
   IsOptional,
   IsString,
   Matches,
@@ -50,13 +53,21 @@ export class CreateWarehouseDto {
   city!: string;
 
   @ApiPropertyOptional({ example: 21.028511 })
-  @IsOptional()
-  @IsNumber()
+  @ValidateIf(
+    (value: CreateWarehouseDto) => value.latitude !== undefined || value.longitude !== undefined,
+  )
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(-90)
+  @Max(90)
   latitude?: number;
 
   @ApiPropertyOptional({ example: 105.804817 })
-  @IsOptional()
-  @IsNumber()
+  @ValidateIf(
+    (value: CreateWarehouseDto) => value.latitude !== undefined || value.longitude !== undefined,
+  )
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(-180)
+  @Max(180)
   longitude?: number;
 
   @ApiPropertyOptional({ default: true })
