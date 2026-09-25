@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '../generated/prisma/client.js';
+import { startupStep } from '../common/startup.js';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -21,8 +22,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleInit(): Promise<void> {
-    await this.$connect();
-    await this.$queryRaw`SELECT 1`;
+    await startupStep('Database', async () => {
+      await this.$connect();
+      await this.$queryRaw`SELECT 1`;
+    });
   }
 
   async onModuleDestroy(): Promise<void> {

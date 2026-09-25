@@ -88,8 +88,28 @@ describe('NotificationJobsService', () => {
     expect(duplicate).toHaveBeenCalledTimes(2);
     expect(disconnect).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledWith(
-      'BullMQ disabled because Redis became unavailable: ECONNREFUSED',
+      'BullMQ disabled because Redis became unavailable: BullMQ Redis producers startup connection or readiness failed',
     );
+  });
+
+  it('fails closed if Redis disappears during production queue startup', async () => {
+    const disconnect = jest.fn();
+    const duplicate = jest.fn(() => ({
+      connect: jest.fn(() => Promise.reject(new Error('private connection details'))),
+      disconnect,
+      on: jest.fn(),
+    }));
+    const jobs = new NotificationJobsService(
+      { isAvailable: () => true, getClient: () => ({ duplicate }) } as unknown as RedisService,
+      {} as PrismaService,
+      {} as NotificationsGateway,
+      {} as EmailSender,
+      { getOrThrow: () => 'production' } as unknown as ConfigService,
+    );
+    await expect(jobs.onModuleInit()).rejects.toThrow(
+      'BullMQ Redis producers startup connection or readiness failed',
+    );
+    expect(disconnect).toHaveBeenCalledTimes(2);
   });
 
   it('uses the persisted email marker to make a retry idempotent', async () => {

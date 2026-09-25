@@ -9,6 +9,7 @@ import { RedisService } from '../../redis/redis.service.js';
 import { redactSensitiveText } from '../../common/logging/structured-log.js';
 import { EmailSender } from './email-sender.js';
 import { NotificationsGateway } from './notifications.gateway.js';
+import { startupStep } from '../../common/startup.js';
 
 interface NotificationJobData {
   kind: 'notification';
@@ -64,22 +65,31 @@ export class NotificationJobsService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit(): Promise<void> {
     if (!this.redis.isAvailable?.()) {
+      if (this.config.getOrThrow<string>('NODE_ENV') === 'production') {
+        throw new Error('BullMQ startup requires Redis');
+      }
       this.logger.warn('BullMQ disabled because Redis is unavailable');
       return;
     }
     const client = this.redis.getClient();
     if (typeof client.duplicate !== 'function') {
+      if (this.config.getOrThrow<string>('NODE_ENV') === 'production') {
+        throw new Error('BullMQ startup requires Redis connections');
+      }
       this.logger.warn('BullMQ disabled because the Redis client cannot create connections');
       return;
     }
     const notificationQueueConnection = this.connection(client, 'producer');
     const emailQueueConnection = this.connection(client, 'producer');
     try {
-      await Promise.all([notificationQueueConnection.connect(), emailQueueConnection.connect()]);
+      await startupStep('BullMQ Redis producers', () =>
+        Promise.all([notificationQueueConnection.connect(), emailQueueConnection.connect()]),
+      );
     } catch (error) {
       notificationQueueConnection.disconnect(false);
       emailQueueConnection.disconnect(false);
       this.connections.length = 0;
+      if (this.config.getOrThrow<string>('NODE_ENV') === 'production') throw error;
       this.logger.warn(
         `BullMQ disabled because Redis became unavailable: ${this.errorMessage(error)}`,
       );

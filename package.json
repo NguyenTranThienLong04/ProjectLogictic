@@ -22,7 +22,7 @@
     "infra:check": "npm run infra:check --workspace backend"
   },
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

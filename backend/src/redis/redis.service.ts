@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import { redactSensitiveText } from '../common/logging/structured-log.js';
+import { startupStep } from '../common/startup.js';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -14,6 +15,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     this.requiredAtStartup = configService.getOrThrow<string>('NODE_ENV') === 'production';
     this.client = new Redis(configService.getOrThrow<string>('REDIS_URL'), {
       lazyConnect: true,
+      connectTimeout: 10_000,
       maxRetriesPerRequest: 1,
       enableReadyCheck: true,
       enableOfflineQueue: false,
@@ -26,8 +28,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit(): Promise<void> {
     try {
-      await this.client.connect();
-      await this.client.ping();
+      await startupStep('Redis', async () => {
+        await this.client.connect();
+        await this.client.ping();
+      });
       this.reconnectAfterReady = true;
     } catch (error) {
       this.client.disconnect(false);

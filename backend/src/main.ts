@@ -6,14 +6,27 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import type { Express } from 'express';
-import { AppModule } from './app.module.js';
 import { structuredLog } from './common/logging/structured-log.js';
 import { ConfiguredSocketIoAdapter } from './common/realtime/configured-socket-io.adapter.js';
 
+let startupStage = 'environment/module loading';
+console.log('Starting API...');
+const startupDeadline = setTimeout(() => {
+  console.error(`API startup timed out during ${startupStage} (60 seconds)`);
+  process.exit(1);
+}, 60_000);
+
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
+  // Import inside the guarded bootstrap so environment validation failures are caught.
+  const { AppModule } = await import('./app.module.js');
+  startupStage = 'Nest dependency construction';
+  const app = await NestFactory.create(AppModule, {
+    logger: false,
+    abortOnError: false,
+    rawBody: true,
+  });
   const configService = app.get(ConfigService);
-  const port = configService.getOrThrow<number>('PORT');
+  const port = Number(configService.getOrThrow<string>('PORT'));
   const frontendUrl = configService.getOrThrow<string>('FRONTEND_URL');
   const trustProxyHops = Number(configService.getOrThrow<string>('TRUST_PROXY_HOPS'));
 
@@ -51,7 +64,12 @@ async function bootstrap(): Promise<void> {
   }
 
   app.enableShutdownHooks();
-  await app.listen(port);
+  startupStage = 'DB/Redis/BullMQ initialization';
+  await app.init();
+  startupStage = 'HTTP listen';
+  await app.listen(port, '0.0.0.0');
+  clearTimeout(startupDeadline);
+  console.log(`Listening on 0.0.0.0:${port}`);
   Logger.log(
     structuredLog('application.started', {
       port,
@@ -64,13 +82,14 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap().catch((error: unknown) => {
-  Logger.error(
+  console.error(
     structuredLog('application.startup.failed', {
       errorName: error instanceof Error ? error.name : 'UnknownError',
       errorMessage: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+      stage: startupStage,
     }),
-    'Bootstrap',
   );
-  process.exitCode = 1;
+  clearTimeout(startupDeadline);
+  // Existing Redis/BullMQ sockets must not keep a failed bootstrap alive.
+  process.exit(1);
 });

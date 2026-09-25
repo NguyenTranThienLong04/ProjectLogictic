@@ -1,0 +1,55 @@
+# Isolated infrastructure; no staging credentials, business data or queue consumers.
+services:
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: smoke
+      POSTGRES_DB: smoke
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U smoke -d smoke']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  redis:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  api:
+    image: node:22-bookworm-slim
+    working_dir: /app
+    command: ['node', 'backend/dist/main.js']
+    volumes:
+      - ../backend/dist:/app/backend/dist:ro
+      - ../backend/package.json:/app/backend/package.json:ro
+      - ../backend/scripts/check-startup-failures.mjs:/app/check-startup-failures.mjs:ro
+      - ../node_modules:/app/node_modules:ro
+    ports:
+      - '127.0.0.1:10000:10000'
+    environment:
+      NODE_ENV: production
+      PORT: '10000'
+      DATABASE_URL: postgresql://smoke@database:5432/smoke
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: https://startup-smoke.example.test
+      JWT_ACCESS_SECRET: startup-smoke-only-isolated-credential-0123456789
+      EMAIL_DELIVERY_ENABLED: 'false'
+      ROUTE_PROVIDER: DISABLED
+      PAYMENT_PROVIDER: DISABLED
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:10000/api/v1/health/ready').then(async r=>{const b=await r.json();process.exit(r.status===200 && b.data.checks.database==='up' && b.data.checks.redis==='up'?0:1)}).catch(()=>process.exit(1))"
+      interval: 3s
+      timeout: 3s
+      retries: 20
