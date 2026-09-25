@@ -6,6 +6,7 @@ import { AuthContext, type AuthContextValue } from '../../src/features/auth/auth
 import { AddressesPage } from '../../src/features/addresses/addresses-page';
 import { CreateShipmentPage } from '../../src/features/shipments/create-shipment-page';
 import { QuotePage } from '../../src/features/pricing/quote-page';
+import { PricingConfigPage } from '../../src/features/pricing/pricing-config-page';
 import { AdminWarehousesPage } from '../../src/features/warehouses/pages/admin-warehouses-page';
 import { AdminDriversPage } from '../../src/features/operations/admin-drivers-page';
 import '../../src/styles.css';
@@ -23,6 +24,7 @@ if (page.startsWith('/admin/') && auth.user) auth.user.role = 'ADMIN';
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={client}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={[page]}>
     <Routes>
+      <Route path="/admin/pricing" element={<PricingConfigPage />} />
       <Route path="/admin/drivers" element={<AdminDriversPage />} />
       <Route path="/admin/warehouses" element={<AdminWarehousesPage />} />
       <Route path="/addresses" element={<AddressesPage />} />

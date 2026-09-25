@@ -9,6 +9,7 @@ import {
 import type { Response } from 'express';
 import type { RequestWithContext } from '../http/request-context.js';
 import { structuredLog } from '../logging/structured-log.js';
+import { PricingConfigUnavailableException } from '../../modules/pricing/pricing-config-unavailable.exception.js';
 
 interface ErrorResponse {
   statusCode?: number;
@@ -30,7 +31,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       exception instanceof HttpException ? exception.getResponse() : undefined;
     const internalServerErrorStatus: number = HttpStatus.INTERNAL_SERVER_ERROR;
     const isServerError = status >= internalServerErrorStatus;
-    const details = isServerError ? {} : this.normalizeResponse(exceptionResponse);
+    const redact = isServerError && !(exception instanceof PricingConfigUnavailableException);
+    const details = redact ? {} : this.normalizeResponse(exceptionResponse);
 
     if (isServerError) {
       this.logger.error(
@@ -48,8 +50,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     response.status(status).json({
       statusCode: status,
-      code: isServerError ? 'INTERNAL_SERVER_ERROR' : (details.code ?? this.defaultCode(status)),
-      message: isServerError ? 'Internal server error' : (details.message ?? 'Request failed'),
+      code: redact ? 'INTERNAL_SERVER_ERROR' : (details.code ?? this.defaultCode(status)),
+      message: redact ? 'Internal server error' : (details.message ?? 'Request failed'),
       ...(request.requestId ? { requestId: request.requestId } : {}),
     });
   }

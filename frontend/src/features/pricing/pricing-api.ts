@@ -1,6 +1,12 @@
+import axios from 'axios';
 import { api } from '../../services/api';
 import type { ApiEnvelope } from '../../types/auth';
-import type { AddressSnapshot, PackageSnapshot, PricingBreakdown } from '../shipments/shipment-types';
+import type { ApiErrorBody } from '../../types/auth';
+import type {
+  AddressSnapshot,
+  PackageSnapshot,
+  PricingBreakdown,
+} from '../shipments/shipment-types';
 
 export interface QuoteInput extends Omit<PackageSnapshot, 'description'> {
   pickup: AddressSnapshot;
@@ -27,6 +33,14 @@ export interface PricingConfigInput {
   includedWeightGrams: number;
   extraWeightFeePerKg: number;
   codFeeBasisPoints: number;
+}
+
+export function isPricingConfigUnavailable(error: unknown): boolean {
+  return (
+    axios.isAxiosError<ApiErrorBody>(error) &&
+    error.response?.status === 503 &&
+    error.response.data?.code === 'PRICING_CONFIG_UNAVAILABLE'
+  );
 }
 
 export async function getQuote(input: QuoteInput): Promise<PricingBreakdown> {

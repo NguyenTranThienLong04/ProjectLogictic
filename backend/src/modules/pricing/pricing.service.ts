@@ -1,9 +1,10 @@
-import { ConflictException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, UserRole, type PricingConfig } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { CreatePricingConfigDto } from './dto/create-pricing-config.dto.js';
 import type { ShippingQuoteDto } from './dto/shipping-quote.dto.js';
 import type { PricingBreakdown, PublicPricingConfig } from './pricing.types.js';
+import { PricingConfigUnavailableException } from './pricing-config-unavailable.exception.js';
 
 @Injectable()
 export class PricingService {
@@ -45,10 +46,7 @@ export class PricingService {
       orderBy: { version: 'desc' },
     });
     if (!config) {
-      throw new ServiceUnavailableException({
-        code: 'PRICING_CONFIG_UNAVAILABLE',
-        message: 'Shipping pricing is temporarily unavailable',
-      });
+      throw new PricingConfigUnavailableException();
     }
     return config;
   }

@@ -4,6 +4,7 @@ import {
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { UserRole } from '../../generated/prisma/client.js';
@@ -26,6 +27,10 @@ export class PricingController {
   @Roles(UserRole.CUSTOMER)
   @ApiOperation({ summary: 'Calculate a server-authoritative shipping quote' })
   @ApiOkResponse({ description: 'Integer VND fee breakdown' })
+  @ApiServiceUnavailableResponse({
+    description:
+      'PRICING_CONFIG_UNAVAILABLE when no active pricing config exists; no fallback quote',
+  })
   quote(@Body() dto: ShippingQuoteDto): Promise<PricingBreakdown> {
     return this.pricingService.quote(dto);
   }
@@ -34,6 +39,10 @@ export class PricingController {
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get the active pricing configuration' })
   @ApiOkResponse({ description: 'Active versioned pricing configuration' })
+  @ApiServiceUnavailableResponse({
+    description:
+      'PRICING_CONFIG_UNAVAILABLE: Admin must explicitly create and activate a pricing config',
+  })
   getConfig(): Promise<PublicPricingConfig> {
     return this.pricingService.getActiveConfig();
   }
