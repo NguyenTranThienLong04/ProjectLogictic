@@ -29,8 +29,8 @@ test('pinned dataset integrity: 34 provinces, 3321 unique wards, valid parents/c
     assert(Number.isFinite(unit.longitude) && Math.abs(unit.longitude) <= 180);
   }
   for (const ward of wards) assert(provinces.some((p) => p.code === ward.provinceCode));
-  const bytes = readFileSync(new URL('../src/features/addresses/data/vietnam-admin.json', import.meta.url));
-  const source = JSON.parse(readFileSync(new URL('../src/features/addresses/data/SOURCE.json', import.meta.url)));
+  const bytes = readFileSync(new URL('../../backend/src/common/addresses/data/vietnam-admin.json', import.meta.url));
+  const source = JSON.parse(readFileSync(new URL('../../backend/src/common/addresses/data/SOURCE.json', import.meta.url)));
   assert.equal(createHash('sha256').update(bytes).digest('hex'), source.outputSha256);
 });
 
@@ -40,6 +40,8 @@ test('accent-insensitive search and province-scoped ward lookup', () => {
   assert.equal(normalizeAdministrativeSearch('Đà Nẵng'), 'da nang');
   assert.equal(findProvince('Ho Chi Minh City').code, '79');
   assert.equal(findWard('79', 'phường bến thành').code, '26743');
+  assert.equal(findWard('79', 'Bến Thành').fullName, 'Phường Bến Thành');
+  assert(wards.some((ward) => ward.fullName.startsWith('Xã ')));
   assert.equal(findWard('01', 'Bến Thành'), undefined);
   assert.equal(findProvince('Bình Dương'), undefined);
 });

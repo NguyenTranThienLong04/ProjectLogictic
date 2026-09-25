@@ -15,7 +15,12 @@ const valid = {
   lat: '10.77',
   lon: '106.69',
   display_name: '123 Nguyễn Trãi',
-  address: { country_code: 'vn', road: 'Nguyễn Trãi' },
+  address: {
+    country_code: 'vn',
+    road: 'Nguyễn Trãi',
+    state: 'Hồ Chí Minh',
+    suburb: 'Phường Bến Thành',
+  },
 };
 describe('address search', () => {
   const originalFetch = globalThis.fetch;
@@ -63,8 +68,138 @@ describe('address search', () => {
     expect(url.origin + url.pathname).toBe('https://us1.locationiq.com/v1/search');
     expect(url.searchParams.get('countrycodes')).toBe('vn');
     expect(url.searchParams.get('limit')).toBe('5');
-    expect(url.searchParams.get('q')).toBe('123 Nguyễn Trãi, Bến Thành, Hồ Chí Minh, Vietnam');
+    expect(url.searchParams.get('q')).toBe(
+      '123 Nguyễn Trãi, Phường Bến Thành, Hồ Chí Minh, Vietnam',
+    );
+    expect(url.searchParams.get('viewbox')).toBe('106.644103,10.720000,106.745897,10.820000');
+    expect(url.searchParams.get('bounded')).toBe('0');
     expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+  it('rejects Thu Duc for 123 Nguyễn Trãi + Hồ Chí Minh + Bến Thành, preserving only the matching pin', async () => {
+    const thuDuc = {
+      ...valid,
+      place_id: 'thu-duc',
+      lat: '10.851',
+      lon: '106.759',
+      display_name: '123 Nguyễn Trãi, Thành phố Thủ Đức, Hồ Chí Minh, Việt Nam',
+      address: { ...valid.address, city: 'Thành phố Thủ Đức', suburb: 'Linh Chiểu' },
+    };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify([thuDuc, valid])));
+    expect(await service.search(input)).toEqual([
+      expect.objectContaining({
+        id: valid.place_id,
+        latitude: 10.77,
+        longitude: 106.69,
+        displayName: valid.display_name,
+      }),
+    ]);
+  });
+  it.each([
+    ['wrong province', { state: 'Hà Nội' }],
+    ['wrong ward', { suburb: 'Phường Sài Gòn' }],
+    ['same street in another area', { suburb: 'Linh Chiểu', city: 'Thủ Đức' }],
+    ['contradictory city with matching ward', { city: 'Thành phố Thủ Đức' }],
+    ['contradictory county with matching ward', { county: 'Thành phố Thủ Đức' }],
+    ['contradictory district with matching ward', { district: 'Thành phố Thủ Đức' }],
+    ['conflicting province/city', { city: 'Hà Nội' }],
+    ['conflicting locality', { locality: 'Thủ Đức' }],
+    ['conflicting explicit ward in neighbourhood', { neighbourhood: 'Phường Sài Gòn' }],
+    ['conflicting explicit ward in hamlet', { hamlet: 'Phường Sài Gòn' }],
+    ['missing ward', { suburb: undefined }],
+    ['missing province', { state: undefined }],
+    ['wrong country', { country_code: 'us' }],
+    ['conflicting country', { country: 'Singapore' }],
+  ])('returns no match for %s even when street matches', async (_label, address) => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify([{ ...valid, address: { ...valid.address, ...address } }])),
+    );
+    expect(await service.search(input)).toEqual([]);
+  });
+  it.each([
+    '123 Nguyễn Trãi, Phường Bến Thành, Thành phố Thủ Đức, Hồ Chí Minh',
+    '123 Nguyễn Trãi, Phường Sài Gòn, Hồ Chí Minh',
+    '123 Nguyễn Trãi, Bến Thành, Thành phố Hà Nội',
+    '123 Nguyễn Trãi, Bến Thành, Thủ Đức, Hồ Chí Minh',
+    '123 Nguyễn Trãi, Bến Thành, Hà Nội',
+  ])('rejects contradictory display hierarchy without rewriting it: %s', async (display_name) => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify([{ ...valid, display_name }])));
+    expect(await service.search(input)).toEqual([]);
+  });
+  it.each([
+    { state: 'Ho Chi Minh City', suburb: 'Ben Thanh', city: 'Quận 1' },
+    { city: 'TP. Hồ Chí Minh', quarter: 'Bến Thành' },
+    { state: 'Thành phố Hồ Chí Minh', locality: 'Bến Thành' },
+    { state: 'Hồ Chí Minh', city: 'Bến Thành' },
+    { state: 'Hồ Chí Minh', suburb: 'Ben Thanh Ward' },
+    { state: 'Hồ Chí Minh', suburb: 'Quận 1', quarter: 'Bến Thành' },
+    { county: 'Thành phố Hồ Chí Minh', suburb: 'Bến Thành' },
+  ])(
+    'accepts compatible provider hierarchy and retains exact candidate coordinate',
+    async (address) => {
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              ...valid,
+              lat: '10.7695084',
+              lon: '106.6907953',
+              address: { country_code: 'vn', ...address },
+            },
+          ]),
+        ),
+      );
+      expect(await service.search(input)).toEqual([
+        expect.objectContaining({
+          latitude: 10.769508,
+          longitude: 106.690795,
+          displayName: valid.display_name,
+        }),
+      ]);
+    },
+  );
+  it('resolves canonical names and ignores legacy district in the provider query', async () => {
+    fetchMock.mockResolvedValue(new Response('[]'));
+    await service.search({
+      ...input,
+      city: 'TP. Hồ Chí Minh',
+      ward: 'Phường Bến Thành',
+      district: 'Thành phố Thủ Đức',
+    });
+    expect((fetchMock.mock.calls[0][0] as URL).searchParams.get('q')).toBe(
+      '123 Nguyễn Trãi, Phường Bến Thành, Hồ Chí Minh, Vietnam',
+    );
+  });
+  it('accepts Thu Duc only when it is the selected canonical ward (no place-name blacklist)', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            ...valid,
+            lat: '10.851',
+            lon: '106.759',
+            display_name: '123 Nguyễn Trãi, Phường Thủ Đức, Hồ Chí Minh',
+            address: {
+              country_code: 'vn',
+              state: 'Hồ Chí Minh',
+              city: 'Thành phố Thủ Đức',
+              suburb: 'Thủ Đức',
+            },
+          },
+        ]),
+      ),
+    );
+    expect(await service.search({ ...input, ward: 'Thủ Đức' })).toEqual([
+      expect.objectContaining({ latitude: 10.851, longitude: 106.759 }),
+    ]);
+  });
+  it.each([
+    { ...input, city: 'Unknown' },
+    { ...input, city: 'Hà Nội' },
+    { ...input, ward: '' },
+    { ...input, ward: 'Unknown' },
+  ])('rejects noncanonical selections before contacting provider', async (selection) => {
+    await expect(service.search(selection)).rejects.toMatchObject({ status: 400 });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
   it.each([429, 500, 503, 401])('sanitizes upstream %s', async (status) => {
     fetchMock.mockResolvedValue(new Response('test-secret-key private body', { status }));
@@ -169,6 +304,8 @@ describe('address search', () => {
     { street: '123', city: '' },
     { ...input, url: 'https://evil.test' },
     { ...input, street: 'x'.repeat(256) },
+    { ...input, ward: undefined },
+    { ...input, ward: ' ' },
   ])('rejects invalid DTO with 400', async (body) => {
     await expect(
       pipe.transform(body, { type: 'body', metatype: AddressSearchDto }),
@@ -177,9 +314,9 @@ describe('address search', () => {
   it('trims and normalizes input', async () => {
     expect(
       await pipe.transform(
-        { street: '  123   Nguyễn Trãi ', city: ' Hồ Chí Minh ' },
+        { street: '  123   Nguyễn Trãi ', city: ' Hồ Chí Minh ', ward: ' Bến Thành ' },
         { type: 'body', metatype: AddressSearchDto },
       ),
-    ).toEqual({ street: input.street, city: input.city });
+    ).toEqual(input);
   });
 });

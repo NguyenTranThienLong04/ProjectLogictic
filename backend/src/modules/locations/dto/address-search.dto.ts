@@ -11,10 +11,9 @@ export class AddressSearchDto {
   street!: string;
 
   @Transform(trim)
-  @IsOptional()
   @IsString()
-  @MaxLength(100)
-  ward?: string;
+  @Length(1, 100)
+  ward!: string;
 
   @Transform(trim)
   @IsOptional()

@@ -54,11 +54,23 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
         new Response(
           JSON.stringify([
             {
+              place_id: 'thu-duc',
+              display_name: '123 Nguyễn Trãi, Thành phố Thủ Đức, Hồ Chí Minh',
+              lat: '10.851',
+              lon: '106.759',
+              address: {
+                country_code: 'vn',
+                state: 'Hồ Chí Minh',
+                city: 'Thành phố Thủ Đức',
+                suburb: 'Bến Thành',
+              },
+            },
+            {
               place_id: '123',
               display_name: 'Test address',
               lat: '10.7695084',
               lon: '106.6907953',
-              address: { country_code: 'vn' },
+              address: { country_code: 'vn', city: 'Hồ Chí Minh', suburb: 'Bến Thành' },
             },
           ]),
         ),
@@ -117,7 +129,7 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
   it('requires authentication, validates body, restricts role and enforces endpoint rate limit', async () => {
     const http = app.getHttpServer() as Server;
     const path = '/api/v1/locations/address-search';
-    const body = { street: ' 123 Nguyễn Trãi ', city: ' Hồ Chí Minh ' };
+    const body = { street: ' 123 Nguyễn Trãi ', city: ' Hồ Chí Minh ', ward: ' Bến Thành ' };
     await request(http).post(path).send(body).expect(401);
     await request(http)
       .post(path)
@@ -133,6 +145,7 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
       .send(body)
       .expect(200);
     const result = (response.body as { data: { latitude: number; longitude: number }[] }).data[0];
+    expect((response.body as { data: unknown[] }).data).toHaveLength(1);
     expect(typeof result.latitude).toBe('number');
     expect(typeof result.longitude).toBe('number');
     expect(result).toMatchObject({ latitude: 10.769508, longitude: 106.690795 });
@@ -189,7 +202,11 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
       latitude: result.latitude,
       longitude: result.longitude,
     });
-    expect(search).toHaveBeenLastCalledWith({ street: '123 Nguyễn Trãi', city: 'Hồ Chí Minh' });
+    expect(search).toHaveBeenLastCalledWith({
+      street: '123 Nguyễn Trãi',
+      city: 'Hồ Chí Minh',
+      ward: 'Bến Thành',
+    });
     for (let i = 0; i < 6; i++)
       await request(http)
         .post(path)

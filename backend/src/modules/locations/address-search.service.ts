@@ -1,7 +1,15 @@
-import { HttpException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import type { AddressSearchDto } from './dto/address-search.dto.js';
+import { findProvince, findWard } from '../../common/addresses/administrative-data.js';
+import { addressSearchViewbox, matchesSelectedAdministration } from './address-search-policy.js';
 
 export interface AddressSearchResult {
   id: string;
@@ -37,6 +45,11 @@ export class AddressSearchService {
   ) {}
 
   async search(input: AddressSearchDto): Promise<AddressSearchResult[]> {
+    const province = findProvince(input.city);
+    const ward = findWard(province?.code, input.ward);
+    if (!province || !ward)
+      throw new BadRequestException('Select a valid canonical province and ward');
+    const selected = { province, ward };
     const key = this.config.get<string>('LOCATIONIQ_API_KEY');
     if (!key) throw new ServiceUnavailableException('Address search is unavailable');
     // Account-wide limits in addition to the controller's per-client throttle.
@@ -65,14 +78,14 @@ export class AddressSearchService {
     const url = new URL('https://us1.locationiq.com/v1/search');
     url.search = new URLSearchParams({
       key,
-      q: [input.street, input.ward, input.district, input.city, 'Vietnam']
-        .filter(Boolean)
-        .join(', '),
+      q: [input.street, ward.fullName, province.name, 'Vietnam'].join(', '),
       format: 'json',
       countrycodes: 'vn',
       limit: '5',
       addressdetails: '1',
       'accept-language': 'vi',
+      viewbox: addressSearchViewbox(selected),
+      bounded: '0',
     }).toString();
     let response: Response;
     let body: unknown;
@@ -99,7 +112,6 @@ export class AddressSearchService {
     for (const item of body as unknown[]) {
       const row = record(item);
       const address = record(row?.address);
-      if (text(address?.country_code)?.toLowerCase() !== 'vn') continue;
       const latitude = coordinate(row?.lat, 90);
       const longitude = coordinate(row?.lon, 180);
       const displayName = text(row?.display_name);
@@ -108,6 +120,7 @@ export class AddressSearchService {
           ? String(row.place_id)
           : text(row?.place_id);
       if (latitude === undefined || longitude === undefined || !displayName || !id) continue;
+      if (!address || !matchesSelectedAdministration(address, displayName, selected)) continue;
       results.push({
         id,
         displayName,

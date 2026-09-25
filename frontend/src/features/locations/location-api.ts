@@ -1,5 +1,5 @@
 import { api } from '../../services/api';
-export type AddressSearchInput = { street: string; ward?: string; district?: string; city: string };
+export type AddressSearchInput = { street: string; ward: string; district?: string; city: string };
 export type AddressSearchResult = {
   id: string; displayName: string; latitude: number; longitude: number;
   houseNumber?: string; road?: string; ward?: string; city?: string;

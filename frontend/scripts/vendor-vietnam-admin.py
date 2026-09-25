@@ -9,7 +9,7 @@ from urllib.request import urlopen
 
 REVISION = '54cdb052284b02e75dfaa44089ca383aa12c57db'
 BASE = f'https://raw.githubusercontent.com/open-admin-data/vietnam-administrative-divisions/{REVISION}/'
-TARGET = Path(__file__).resolve().parents[1] / 'src/features/addresses/data'
+TARGET = Path(__file__).resolve().parents[2] / 'backend/src/common/addresses/data'
 
 
 def download(path):
@@ -43,8 +43,10 @@ if __name__ == '__main__':
     assert {(p['id'], p['name']['local']) for p in provinces} == {(p['Code'], bare_name(p['FullName'])) for p in reference}
     assert {(w['id'], w['name']['local'], w['parent']['id']) for w in wards} == {
         (w['Code'], bare_name(w['FullName']), w['ProvinceCode']) for p in reference for w in p['Wards']}
+    full_names = {w['Code']: w['FullName'] for p in reference for w in p['Wards']}
     data = {'provinces': [compact(p) for p in provinces],
-            'wards': [{**compact(w), 'provinceCode': w['parent']['id']} for w in wards]}
+            'wards': [{**compact(w), 'provinceCode': w['parent']['id'],
+                       'fullName': full_names[w['id']]} for w in wards]}
     TARGET.mkdir(parents=True, exist_ok=True)
     (TARGET / 'vietnam-admin.json').write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
     (TARGET / 'LICENSE.txt').write_bytes(download('LICENSE'))
