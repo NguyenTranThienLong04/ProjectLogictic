@@ -63,7 +63,7 @@ export function ProfilePage() {
     updateMutation.mutate({ fullName, phone: phone || null });
   });
 
-  if (profileQuery.isPending) return <LoadingState label="Đang tải hồ sơ" />;
+  if (profileQuery.isPending) return <AccountLayout><LoadingState label="Đang tải hồ sơ" /></AccountLayout>;
 
   return (
     <AccountLayout>

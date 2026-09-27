@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { normalizeLocationIqAddress } from './locationiq-address-normalization.js';
 import { evaluateAddressCandidate } from './address-search.service.js';
 import { findProvince, findWard } from '../../common/addresses/administrative-data.js';
+import { matchesSearchStreet } from './address-search-policy.js';
 
 const input = { street: '123 Nguyễn Trãi', city: 'Hồ Chí Minh', ward: 'Bến Thành' };
 const province = findProvince(input.city)!;
@@ -24,6 +25,37 @@ const live = {
 };
 
 describe('LocationIQ hierarchy semantics', () => {
+  it('rejects the observed Bình Chánh fallback locality for the exact house query', () => {
+    // Live provider capture 2026-09-27: structured 404, fallback locality only.
+    const requested = {
+      street: '14/13a đường số 4 khu phố 2',
+      ward: 'Bình Chánh',
+      city: 'Hồ Chí Minh',
+    };
+    const candidate = {
+      place_id: '332108734773',
+      lat: '10.69541',
+      lon: '106.59128',
+      display_name: 'Tân Túc, Binh Chanh, Thành phố Hồ Chí Minh, Việt Nam',
+      address: {
+        city: 'Tân Túc',
+        county: 'Binh Chanh',
+        state: 'Thành phố Hồ Chí Minh',
+        country: 'Việt Nam',
+        country_code: 'vn',
+      },
+    };
+    expect(
+      evaluateAddressCandidate(candidate, requested, {
+        province,
+        ward: findWard(province.code, requested.ward)!,
+      }),
+    ).toEqual({ rejection: 'hierarchy_anomaly_without_ward_match' });
+    // Even absent the hierarchy rejection, this is not house/road evidence.
+    expect(
+      matchesSearchStreet(normalizeLocationIqAddress(candidate.address), requested.street),
+    ).toBe(false);
+  });
   it('keeps raw city out of canonical province evidence', () => {
     const normalized = normalizeLocationIqAddress(live.address);
     expect(normalized.provinceLevels).toEqual([]);

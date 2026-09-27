@@ -6,17 +6,36 @@ import { parseEnv } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import { AddressSearchService, evaluateAddressCandidate } from '../dist/modules/locations/address-search.service.js';
-import { addressSearchViewbox } from '../dist/modules/locations/address-search-policy.js';
+import { addressSearchViewbox, assessAdministration, isInAddressSearchArea, matchesSearchStreet } from '../dist/modules/locations/address-search-policy.js';
 import { findProvince, findWard } from '../dist/common/addresses/administrative-data.js';
+import { normalizeLocationIqAddress } from '../dist/modules/locations/locationiq-address-normalization.js';
 
 const envFile = process.argv[2];
 if (!envFile) throw new Error('Pass the local env-file path explicitly');
 const env = parseEnv(await readFile(envFile, 'utf8'));
 const key = env.LOCATIONIQ_API_KEY?.trim();
 if (!key) throw new Error('LOCATIONIQ_API_KEY is not configured in the supplied env file');
-const input = { street: '123 Nguyễn Trãi', ward: 'Bến Thành', city: 'Hồ Chí Minh' };
+// Optional JSON lets regression audits reproduce the exact form payload without
+// editing product policy or overwriting evidence from an earlier address.
+const argument = (name) => {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return undefined;
+  if (!process.argv[index + 1] || process.argv[index + 1].startsWith('--'))
+    throw new Error(`Missing value for ${name}`);
+  return process.argv[index + 1];
+};
+const inputFile = argument('--input');
+const outputFile = argument('--output') ?? 'test-results/locationiq-hierarchy-live.json';
+if (!/^test-results\/[a-zA-Z0-9_-]+\.json$/.test(outputFile))
+  throw new Error('Output must be a JSON filename directly under test-results/');
+const input = inputFile
+  ? JSON.parse(await readFile(inputFile, 'utf8'))
+  : { street: '123 Nguyễn Trãi', ward: 'Bến Thành', city: 'Hồ Chí Minh' };
+if (['street', 'ward', 'city'].some((field) => typeof input[field] !== 'string' || !input[field].trim()))
+  throw new Error('Input requires non-empty street, ward and city strings');
 const province = findProvince(input.city);
-const ward = findWard(province.code, input.ward);
+const ward = findWard(province?.code, input.ward);
+if (!province || !ward) throw new Error('Input must select a canonical province and ward');
 const selected = { province, ward };
 const evidence = {
   at: new Date().toISOString(),
@@ -37,10 +56,28 @@ globalThis.fetch = async (url, options) => {
     const raw = await response.clone().json().catch(() => null);
     if (Array.isArray(raw)) {
       attempt.rawCandidates = raw;
-      attempt.evaluations = raw.map((row) => ({
-        placeId: row.place_id,
-        ...evaluateAddressCandidate(row, input, selected),
-      }));
+      attempt.evaluations = raw.map((row) => {
+        const normalizedAddress = row?.address && typeof row.address === 'object' && !Array.isArray(row.address)
+          ? normalizeLocationIqAddress(row.address)
+          : null;
+        return {
+          placeId: row?.place_id,
+          normalizedAddress,
+          // Independent diagnostics reuse product policy. The evaluator below
+          // remains authoritative and reports its first rejecting gate.
+          checks: normalizedAddress ? {
+            rawCoordinateInsideSearchArea: isInAddressSearchArea(Number(row.lat), Number(row.lon), selected),
+            administration: assessAdministration(normalizedAddress, selected),
+            streetAndHouseMatch: matchesSearchStreet(normalizedAddress, input.street),
+          } : null,
+          ...evaluateAddressCandidate(row, input, selected),
+        };
+      });
+    } else if (response.status === 404) {
+      // The provider's not-found response contains no candidate to normalize.
+      attempt.rawCandidates = [];
+      attempt.evaluations = [];
+      attempt.outcome = 'provider_not_found';
     }
     return response;
   } catch {
@@ -72,5 +109,5 @@ try {
   storage.onApplicationShutdown();
 }
 await mkdir('test-results', { recursive: true });
-await writeFile('test-results/locationiq-hierarchy-live.json', JSON.stringify(evidence, null, 2) + '\n');
+await writeFile(outputFile, JSON.stringify(evidence, null, 2) + '\n');
 console.log(JSON.stringify(evidence, null, 2));

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { LoadingState } from '../components/ui/loading-state';
 import { GuestRoute, ProtectedRoute } from './route-guards';
 import { AuthenticatedRoleRoutes } from './role-routes/authenticated-role-routes';
+import { AuthenticatedWorkspace } from './authenticated-workspace';
 
 const ChangePasswordPage = lazy(() =>
   import('../features/auth/pages/change-password-page').then((module) => ({
@@ -62,9 +63,11 @@ export function App() {
           <Route element={<ChangePasswordPage />} path="/change-password" />
         </Route>
         <Route element={<ProtectedRoute />}>
-          <Route element={<ProfilePage />} path="/profile" />
-          <Route element={<NotificationsPage />} path="/notifications" />
-          <Route element={<AuthenticatedRoleRoutes />} path="/*" />
+          <Route element={<AuthenticatedWorkspace />}>
+            <Route element={<ProfilePage />} path="/profile" />
+            <Route element={<NotificationsPage />} path="/notifications" />
+            <Route element={<AuthenticatedRoleRoutes />} path="/*" />
+          </Route>
         </Route>
         <Route element={<Navigate replace to="/" />} path="*" />
       </Routes>

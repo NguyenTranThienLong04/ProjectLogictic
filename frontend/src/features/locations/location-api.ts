@@ -20,8 +20,8 @@ import type {
 export async function updateDriverLocation(input: {
   latitude: number;
   longitude: number;
-}): Promise<DriverLocation> {
-  const response = await api.post<ApiEnvelope<DriverLocation>>('/driver/location', input);
+}, signal?: AbortSignal): Promise<DriverLocation> {
+  const response = await api.post<ApiEnvelope<DriverLocation>>('/driver/location', input, { signal });
   return response.data.data;
 }
 
@@ -47,10 +47,12 @@ export async function listOperationalDriverLocations(): Promise<OperationalDrive
 export async function updateLineHaulTripLocation(
   tripId: string,
   input: { latitude: number; longitude: number },
+  signal?: AbortSignal,
 ): Promise<LineHaulLocation> {
   const response = await api.post<ApiEnvelope<LineHaulLocation>>(
     `/driver/line-haul/trips/${tripId}/location`,
     input,
+    { signal },
   );
   return response.data.data;
 }

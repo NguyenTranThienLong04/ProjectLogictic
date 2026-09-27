@@ -1,6 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { isAxiosError } from 'axios';
 import { Outlet } from 'react-router-dom';
+import { subscribeToAuthSession } from '../../services/auth-session';
+import { getMyDriverProfile } from '../operations/operations-api';
+import {
+  DRIVER_GPS_INTERVAL_MS,
+  locateBrowserPosition,
+  startDriverGpsPublisher,
+} from './driver-gps-publisher';
 import { Button } from '../../components/ui/button';
 import { getApiErrorMessage } from '../../services/api-error';
 import { createOperationsSocket } from '../../services/operations-socket';
@@ -23,7 +31,7 @@ import {
   type DriverLocationContextValue,
 } from './driver-location-context';
 
-const UPDATE_INTERVAL_MS = 5_000;
+const UPDATE_INTERVAL_MS = DRIVER_GPS_INTERVAL_MS;
 const simulationRoute = [
   { latitude: 10.7757, longitude: 106.7004 },
   { latitude: 10.7762, longitude: 106.7013 },
@@ -44,11 +52,27 @@ export function DriverLocationProvider() {
   const [gpsState, setGpsState] = useState<DriverGpsState>('LOCATING');
   const [gpsMessage, setGpsMessage] = useState<string | null>(null);
   const step = useRef(0);
-  const lastSentAt = useRef(0);
+  const [retry, setRetry] = useState(0);
+  const profile = useQuery({
+    queryKey: ['driver-profile'],
+    queryFn: getMyDriverProfile,
+    enabled: user?.role === 'DRIVER' && user.status === 'ACTIVE',
+    refetchInterval: UPDATE_INTERVAL_MS,
+    refetchIntervalInBackground: true,
+    retry: false,
+  });
+  const online =
+    user?.status === 'ACTIVE' &&
+    !profile.isError &&
+    profile.data?.isOnline === true &&
+    (profile.data.status === 'AVAILABLE' || profile.data.status === 'BUSY');
+  const refetchProfile = profile.refetch;
   const activeTrip = useQuery({
     queryKey: ['my-active-line-haul-trip'],
     queryFn: getMyActiveLineHaulTrip,
-    enabled: Boolean(user),
+    enabled: user?.role === 'DRIVER' && user.status === 'ACTIVE',
+    refetchIntervalInBackground: true,
+    retry: false,
     refetchInterval: UPDATE_INTERVAL_MS,
   });
   const activeTripData = activeTrip.data;
@@ -105,98 +129,107 @@ export function DriverLocationProvider() {
     };
   }, [activeTripId, activeTripStatus, queryClient, refetchActiveTrip]);
 
-  const sendLocation = useCallback(
-    async (point: { latitude: number; longitude: number }) => {
-      if (activeTripPending || activeTripFailed) {
-        setGpsState('SERVICE_UNAVAILABLE');
-        setGpsMessage('Không thể xác định ngữ cảnh GPS hiện tại. Vui lòng thử lại.');
-        return;
-      }
-      if (activeTripData && activeTripData.status !== 'IN_TRANSIT') {
-        setGpsState('DISABLED');
-        setGpsMessage('GPS liên kho chỉ bắt đầu sau khi chuyến được xuất phát.');
-        return;
-      }
-      try {
-        if (activeTripData) {
-          await updateLineHaulTripLocation(activeTripData.tripId, point);
-        } else {
-          await updateDriverLocation(point);
-        }
-        setGpsState('CURRENT');
-        setGpsMessage(null);
-      } catch (error) {
-        setGpsState('SERVICE_UNAVAILABLE');
-        setGpsMessage(getApiErrorMessage(error));
-        void refetchActiveTrip();
-      }
-    },
-    [activeTripData, activeTripFailed, activeTripPending, refetchActiveTrip],
-  );
-
-  useEffect(() => {
-    if (!user || simulationEnabled) return;
-    if (activeTripPending || activeTripFailed) return;
-    if (activeTripData && activeTripData.status !== 'IN_TRANSIT') return;
-    if (!navigator.geolocation) return;
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        const now = Date.now();
-        if (now - lastSentAt.current < UPDATE_INTERVAL_MS) return;
-        lastSentAt.current = now;
-        void sendLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-      },
-      (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          setGpsState('PERMISSION_DENIED');
-          setGpsMessage('Quyền vị trí đang bị từ chối. Hãy cho phép định vị trong trình duyệt.');
-        } else {
-          setGpsState('POSITION_UNAVAILABLE');
-          setGpsMessage(
-            error.code === error.TIMEOUT
-              ? 'Thiết bị chưa lấy được GPS kịp thời. Kiểm tra tín hiệu và thử lại.'
-              : 'Thiết bị chưa cung cấp được vị trí hiện tại.',
-          );
-        }
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 },
-    );
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [activeTripData, activeTripFailed, activeTripPending, sendLocation, simulationEnabled, user]);
-
-  useEffect(() => {
-    if (simulationState !== 'running') return;
-    const timer = window.setInterval(() => {
-      const point = simulationRoute[step.current % simulationRoute.length];
-      step.current += speed;
-      void sendLocation(point);
-    }, UPDATE_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [sendLocation, simulationState, speed]);
-
-  const canSimulate =
+  const canPublish =
+    online &&
     !activeTripPending &&
     !activeTripFailed &&
-    (!activeTripData || activeTripData.status === 'IN_TRANSIT');
-  const effectiveGpsState: DriverGpsState = activeTripPending
-    ? 'LOCATING'
-    : activeTripFailed
-      ? 'SERVICE_UNAVAILABLE'
-      : activeTripData && activeTripData.status !== 'IN_TRANSIT'
-        ? 'DISABLED'
-        : !simulationEnabled && !navigator.geolocation
-          ? 'POSITION_UNAVAILABLE'
+    (!activeTripId || activeTripStatus === 'IN_TRANSIT');
+  const userId = user?.id;
+  useEffect(() => {
+    if (!canPublish || (simulationEnabled && simulationState !== 'running')) return;
+    const stop = startDriverGpsPublisher({
+      locate: simulationEnabled
+        ? async () => {
+            const point = simulationRoute[step.current % simulationRoute.length];
+            step.current += speed;
+            return { ...point, timestamp: Date.now() };
+          }
+        : locateBrowserPosition,
+      publish: (point, signal) =>
+        activeTripId
+          ? updateLineHaulTripLocation(activeTripId, point, signal)
+          : updateDriverLocation(point, signal),
+      onState: (state, message) => {
+        setGpsState(state);
+        setGpsMessage(message);
+      },
+      onPublishError: (error) => {
+        void refetchActiveTrip();
+        void queryClient.invalidateQueries({ queryKey: ['driver-profile'] });
+        return {
+          message: getApiErrorMessage(error),
+          stop:
+            isAxiosError(error) &&
+            (error.response?.status === 401 || error.response?.status === 403),
+        };
+      },
+    });
+    const unsubscribe = subscribeToAuthSession((session) => {
+      if (
+        !session ||
+        session.user.id !== userId ||
+        session.user.role !== 'DRIVER' ||
+        session.user.status !== 'ACTIVE'
+      )
+        stop();
+    });
+    return () => {
+      stop();
+      unsubscribe();
+    };
+  }, [
+    canPublish,
+    activeTripId,
+    userId,
+    simulationEnabled,
+    simulationState,
+    speed,
+    retry,
+    queryClient,
+    refetchActiveTrip,
+  ]);
+
+  // Revocation stops on the next permission event; granting again starts a fresh
+  // loop without requiring navigation to Map. Browsers without Permissions API
+  // still request permission through getCurrentPosition and expose manual retry.
+  useEffect(() => {
+    if (!canPublish || simulationEnabled || !navigator.permissions) return;
+    let disposed = false;
+    let permission: PermissionStatus | undefined;
+    const changed = () => setRetry((value) => value + 1);
+    void navigator.permissions
+      .query({ name: 'geolocation' })
+      .then((result) => {
+        if (disposed) return;
+        permission = result;
+        permission.addEventListener('change', changed);
+      })
+      .catch(() => {
+        /* Geolocation remains the permission fallback. */
+      });
+    return () => {
+      disposed = true;
+      permission?.removeEventListener('change', changed);
+    };
+  }, [canPublish, simulationEnabled]);
+
+  const canSimulate = canPublish;
+  const effectiveGpsState: DriverGpsState =
+    profile.isPending || activeTripPending
+      ? 'LOCATING'
+      : profile.isError || activeTripFailed
+        ? 'SERVICE_UNAVAILABLE'
+        : !canPublish || (simulationEnabled && simulationState !== 'running')
+          ? 'DISABLED'
           : gpsState;
-  const effectiveGpsMessage = activeTripFailed
-    ? 'Không thể xác định nhiệm vụ GPS hiện tại.'
-    : activeTripData && activeTripData.status !== 'IN_TRANSIT'
-      ? 'GPS liên kho chỉ bắt đầu sau khi chuyến được xuất phát.'
-      : !simulationEnabled && !navigator.geolocation
-        ? 'Thiết bị hoặc trình duyệt này không hỗ trợ định vị.'
-        : gpsMessage;
+  const effectiveGpsMessage =
+    profile.isError || activeTripFailed
+      ? 'Không thể kiểm tra trạng thái nhận việc. GPS đã tạm dừng; hãy kiểm tra kết nối.'
+      : !online
+        ? 'GPS đã dừng khi ngoại tuyến hoặc tài khoản bị tạm khóa.'
+        : activeTripId && activeTripStatus !== 'IN_TRANSIT'
+          ? 'GPS liên kho chỉ bắt đầu sau khi chuyến được xuất phát.'
+          : gpsMessage;
   const contextValue = useMemo<DriverLocationContextValue>(
     () => ({
       activeLineHaulTrip: activeTripData,
@@ -205,6 +238,11 @@ export function DriverLocationProvider() {
       gpsState: effectiveGpsState,
       gpsMessage: effectiveGpsMessage,
       refreshActiveTrip: () => void refetchActiveTrip(),
+      retryGps: () => {
+        setRetry((value) => value + 1);
+        void refetchProfile();
+        void refetchActiveTrip();
+      },
     }),
     [
       activeTripData,
@@ -213,6 +251,7 @@ export function DriverLocationProvider() {
       effectiveGpsMessage,
       effectiveGpsState,
       refetchActiveTrip,
+      refetchProfile,
     ],
   );
 
@@ -237,9 +276,6 @@ export function DriverLocationProvider() {
               disabled={!canSimulate || simulationState === 'running'}
               onClick={() => {
                 setSimulationState('running');
-                const point = simulationRoute[step.current % simulationRoute.length];
-                step.current += speed;
-                void sendLocation(point);
               }}
             >
               Start

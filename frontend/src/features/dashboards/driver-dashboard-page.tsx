@@ -26,7 +26,8 @@ export function DriverDashboardPage() {
   const dashboard = useQuery({ queryKey: ['driver-dashboard'], queryFn: getDriverDashboard });
   const availability = useMutation({
     mutationFn: setMyAvailability,
-    onSuccess: async () => {
+    onSuccess: async (profile) => {
+      queryClient.setQueryData(['driver-profile'], profile);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['driver-dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['driver-profile'] }),

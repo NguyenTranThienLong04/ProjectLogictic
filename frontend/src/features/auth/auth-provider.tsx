@@ -46,6 +46,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return nextSession;
       },
       logout: async () => {
+        updateAuthSession(null);
         try {
           await authRequests.logout();
         } finally {

@@ -5,6 +5,7 @@ import { Button } from '../../../components/ui/button';
 import type { UserRole } from '../../../types/auth';
 import { NotificationBell } from '../../notifications/notification-bell';
 import { useAuth } from '../auth-context';
+import { DriverGpsStatus } from '../../locations/driver-gps-status';
 
 interface NavigationItem {
   label: string;
@@ -147,6 +148,7 @@ export function AccountLayout({ children }: PropsWithChildren) {
           </nav>
         </div>
       </header>
+      {user?.role === 'DRIVER' ? <DriverGpsStatus /> : null}
       <main
         className={`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 ${denseRole ? 'py-6 sm:py-8 lg:py-10' : 'py-8 sm:py-10'}`}
         id="account-content"

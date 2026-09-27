@@ -4,6 +4,7 @@ import type { LineHaulTripLocation } from './location-types';
 export type DriverGpsState =
   | 'LOCATING'
   | 'CURRENT'
+  | 'STALE'
   | 'PERMISSION_DENIED'
   | 'POSITION_UNAVAILABLE'
   | 'SERVICE_UNAVAILABLE'
@@ -16,6 +17,7 @@ export interface DriverLocationContextValue {
   gpsState: DriverGpsState;
   gpsMessage: string | null;
   refreshActiveTrip: () => void;
+  retryGps: () => void;
 }
 
 export const DriverLocationContext = createContext<DriverLocationContextValue | null>(null);
