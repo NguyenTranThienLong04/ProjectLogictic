@@ -9,7 +9,14 @@ import { ConfigService } from '@nestjs/config';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import type { AddressSearchDto } from './dto/address-search.dto.js';
 import { findProvince, findWard } from '../../common/addresses/administrative-data.js';
-import { addressSearchViewbox, matchesSelectedAdministration } from './address-search-policy.js';
+import {
+  addressSearchViewbox,
+  assessAdministration,
+  isInAddressSearchArea,
+  matchesSearchStreet,
+  type SelectedAdministration,
+} from './address-search-policy.js';
+import { normalizeLocationIqAddress } from './locationiq-address-normalization.js';
 
 export interface AddressSearchResult {
   id: string;
@@ -37,6 +44,50 @@ const coordinate = (value: unknown, max: number): number | undefined => {
   return Number(number.toFixed(6));
 };
 
+// Shared by retrieval and the read-only provider audit; no raw responses are logged.
+export function evaluateAddressCandidate(
+  item: unknown,
+  input: AddressSearchDto,
+  selected: SelectedAdministration,
+):
+  | { result: AddressSearchResult; warnings: string[]; rejection?: never }
+  | { rejection: string; result?: never } {
+  const row = record(item);
+  const address = record(row?.address);
+  const latitude = coordinate(row?.lat, 90);
+  const longitude = coordinate(row?.lon, 180);
+  if (latitude === undefined || longitude === undefined) return { rejection: 'invalid_coordinate' };
+  // Check raw and rounded points so precision normalization cannot cross the window edge.
+  if (
+    !isInAddressSearchArea(Number(row?.lat), Number(row?.lon), selected) ||
+    !isInAddressSearchArea(latitude, longitude, selected)
+  )
+    return { rejection: 'outside_search_area' };
+  const id =
+    typeof row?.place_id === 'number' && Number.isFinite(row.place_id)
+      ? String(row.place_id)
+      : text(row?.place_id);
+  if (!id || !address) return { rejection: 'missing_candidate_fields' };
+  const normalized = normalizeLocationIqAddress(address);
+  const { rejection, warnings } = assessAdministration(normalized, selected);
+  if (rejection) return { rejection };
+  if (!matchesSearchStreet(normalized, input.street))
+    return { rejection: 'street_or_house_mismatch' };
+  return {
+    warnings,
+    result: {
+      id,
+      displayName: [input.street.trim(), selected.ward.fullName, selected.province.name].join(', '),
+      latitude,
+      longitude,
+      houseNumber: normalized.houseNumber,
+      road: normalized.road,
+      ward: selected.ward.name,
+      city: selected.province.name,
+    },
+  };
+}
+
 @Injectable()
 export class AddressSearchService {
   constructor(
@@ -52,7 +103,50 @@ export class AddressSearchService {
     const selected = { province, ward };
     const key = this.config.get<string>('LOCATIONIQ_API_KEY');
     if (!key) throw new ServiceUnavailableException('Address search is unavailable');
+    const common = {
+      key,
+      format: 'json',
+      countrycodes: 'vn',
+      limit: '5',
+      addressdetails: '1',
+      normalizeaddress: '1',
+      'accept-language': 'vi',
+      viewbox: addressSearchViewbox(selected),
+      bounded: '1',
+    };
+    const structured = new URL('https://us1.locationiq.com/v1/search/structured');
+    structured.search = new URLSearchParams({
+      ...common,
+      street: input.street,
+      // Canonical provinces include centrally governed cities: state is the
+      // administrative level shared by every province; never send the ward as city.
+      state: province.name,
+      country: 'Vietnam',
+    }).toString();
+    const selectable = (body: unknown[]) =>
+      body
+        .flatMap((item) => {
+          const evaluation = evaluateAddressCandidate(item, input, selected);
+          return evaluation.result ? [evaluation.result] : [];
+        })
+        .slice(0, 5);
+    const results = selectable(await this.request(structured));
+    // No usable structured result (empty/404 or all rejected): one free-form
+    // attempt in exactly the SAME area, subject to exactly the same validation.
+    if (results.length === 0) {
+      const fallback = new URL('https://us1.locationiq.com/v1/search');
+      fallback.search = new URLSearchParams({
+        ...common,
+        q: [input.street, ward.name, province.name, 'Việt Nam'].join(', '),
+      }).toString();
+      return selectable(await this.request(fallback));
+    }
+    return results;
+  }
+
+  private async request(url: URL): Promise<unknown[]> {
     // Account-wide limits in addition to the controller's per-client throttle.
+    // Charge EACH upstream request, including the fallback.
     // The existing Redis storage supplies its single-instance fallback on outages.
     for (const [window, ttl, limit] of [
       ['second', 1000, 2],
@@ -75,18 +169,6 @@ export class AddressSearchService {
           429,
         );
     }
-    const url = new URL('https://us1.locationiq.com/v1/search');
-    url.search = new URLSearchParams({
-      key,
-      q: [input.street, ward.fullName, province.name, 'Vietnam'].join(', '),
-      format: 'json',
-      countrycodes: 'vn',
-      limit: '5',
-      addressdetails: '1',
-      'accept-language': 'vi',
-      viewbox: addressSearchViewbox(selected),
-      bounded: '0',
-    }).toString();
     let response: Response;
     let body: unknown;
     try {
@@ -103,36 +185,11 @@ export class AddressSearchService {
       if (!response.ok) throw new Error('Upstream unavailable');
       body = await response.json();
       if (!Array.isArray(body)) throw new Error('Invalid upstream response');
+      return body as unknown[];
     } catch (error) {
       if (error instanceof HttpException) throw error;
       // Never retain/log a fetch exception: it can contain the URL and credential.
       throw new ServiceUnavailableException('Address search is unavailable');
     }
-    const results: AddressSearchResult[] = [];
-    for (const item of body as unknown[]) {
-      const row = record(item);
-      const address = record(row?.address);
-      const latitude = coordinate(row?.lat, 90);
-      const longitude = coordinate(row?.lon, 180);
-      const displayName = text(row?.display_name);
-      const id =
-        typeof row?.place_id === 'number' && Number.isFinite(row.place_id)
-          ? String(row.place_id)
-          : text(row?.place_id);
-      if (latitude === undefined || longitude === undefined || !displayName || !id) continue;
-      if (!address || !matchesSelectedAdministration(address, displayName, selected)) continue;
-      results.push({
-        id,
-        displayName,
-        latitude,
-        longitude,
-        houseNumber: text(address?.house_number),
-        road: text(address?.road),
-        ward: text(address?.quarter) ?? text(address?.suburb),
-        city: text(address?.city) ?? text(address?.state),
-      });
-      if (results.length === 5) break;
-    }
-    return results;
   }
 }

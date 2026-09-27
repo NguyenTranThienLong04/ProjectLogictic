@@ -46,7 +46,7 @@ export function AddressSearch({ address, disabled, onSelect }: {
       <a className="focus-ring text-primary underline" href="https://locationiq.com" target="_blank" rel="noreferrer">Search by LocationIQ.com</a>
     </p>
     <div aria-live="polite">
-      {empty && <p className="text-sm text-muted-foreground">Không tìm thấy địa chỉ phù hợp với {ward?.fullName}, {province?.name}. Hãy thử địa chỉ khác hoặc đặt pin thủ công.</p>}
+      {empty && <p className="text-sm text-muted-foreground">Không tìm thấy địa chỉ chính xác. Bạn có thể đặt pin thủ công trong khu vực đã chọn.</p>}
       {failed && <p className="text-sm text-muted-foreground">Không thể tìm địa chỉ lúc này. Hãy thử lại hoặc đặt pin thủ công.</p>}
       {results.length > 0 && <p className="text-sm text-muted-foreground">Chọn một kết quả, kiểm tra ghim rồi xác nhận vị trí.</p>}
     </div>

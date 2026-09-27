@@ -10,11 +10,14 @@ const searchMode = directSearch || process.argv.includes('--search');
 // provider fixtures, then render its filtered response in the real frontend.
 // Requires npm run build. No live provider credentials or DB are used.
 let geocoder;
+let selectedWard;
 if (validatedSearch) {
   const { AddressSearchService } = await import('../../../backend/dist/modules/locations/address-search.service.js');
   geocoder = new AddressSearchService({ get: () => 'fixture-key' }, {
     increment: async () => ({ totalHits: 1, timeToExpire: 1, isBlocked: false, timeToBlockExpire: 0 }),
   });
+  const { findProvince, findWard } = await import('../../../backend/dist/common/addresses/administrative-data.js');
+  selectedWard = (body) => findWard(findProvince(body.city)?.code, body.ward);
 }
 
 // Tests real page components and captured HTTP payloads; does not claim API/DB persistence.
@@ -76,10 +79,20 @@ try {
       if (searchResponse === 'error') { await route.fulfill({ status: 503, json: { message: 'Unavailable' } }); return; }
       data = searchResponse === 'empty' ? [] : [searchResult, { ...searchResult, id: 'vn-2', displayName: 'Kết quả thứ hai' }];
       if (geocoder) {
+        const ward = selectedWard(body);
+        const benThanh = body.city === 'Hồ Chí Minh' && body.ward === 'Bến Thành';
+        searchResult.latitude = benThanh ? 10.769508 : ward.latitude;
+        searchResult.longitude = benThanh ? 106.690795 : ward.longitude;
+        searchResult.displayName = `${body.street}, ${ward.fullName}, ${body.city}`;
         const valid = {
-          place_id: searchResult.id, display_name: searchResult.displayName,
-          lat: '10.7695084', lon: '106.6907953',
-          address: { country_code: 'vn', state: body.city, suburb: body.ward, road: 'Nguyễn Trãi' },
+          place_id: searchResult.id,
+          display_name: benThanh ? `${body.street}, Khu phố 3, Phường Bến Thành, Thành phố Thủ Đức, Việt Nam` : searchResult.displayName,
+          lat: benThanh ? '10.7695084' : String(ward.latitude), lon: benThanh ? '106.6907953' : String(ward.longitude),
+          // Live provider hierarchy anomaly: structured ward/house/road and bbox
+          // win over an ambiguous city level; state is absent.
+          address: { country_code: 'vn', suburb: body.ward, road: 'Đường Nguyễn Trãi', house_number: body.street.split(' ')[0],
+            ...(benThanh ? { city: 'Thành phố Thủ Đức', neighbourhood: 'Khu phố 3' } : {}),
+          },
         };
         const thuDuc = {
           ...valid, place_id: 'thu-duc', lat: '10.851', lon: '106.759',
@@ -90,18 +103,33 @@ try {
           success: [thuDuc, valid], empty: [], 'thu-duc': [thuDuc],
           'wrong-province': [{ ...valid, address: { ...valid.address, state: 'Hà Nội' } }],
           'wrong-ward': [{ ...valid, address: { ...valid.address, suburb: 'Phường Sài Gòn' } }],
-          'conflicting-hierarchy': [{ ...thuDuc, address: { ...thuDuc.address, suburb: 'Bến Thành' } }],
+          'wrong-region': [{ ...valid, address: { ...valid.address, region: 'Hà Nội' } }],
+          'wrong-neighbourhood': [{ ...valid, address: { ...valid.address, neighbourhood: 'Phường Sài Gòn' } }],
+          'outside-area': [{ ...valid, lat: '10.851', lon: '106.759' }],
         };
         const originalFetch = globalThis.fetch;
         globalThis.fetch = async (url) => {
           assert.equal(url.searchParams.get('countrycodes'), 'vn');
-          assert.equal(url.searchParams.get('q'), `${body.street}, Phường ${body.ward}, ${body.city}, Vietnam`);
+          assert.equal(url.searchParams.get('bounded'), '1');
+          assert.equal(url.searchParams.get('normalizeaddress'), '1');
+          if (url.pathname.endsWith('/structured')) {
+            assert.equal(url.searchParams.get('street'), body.street);
+            assert.equal(url.searchParams.get('state'), body.city);
+            assert.equal(url.searchParams.has('q'), false);
+          } else {
+            assert.equal(url.searchParams.get('q'), `${body.street}, ${body.ward}, ${body.city}, Việt Nam`);
+          }
           assert(url.searchParams.get('viewbox'));
           return new Response(JSON.stringify(fixtures[searchResponse]));
         };
         try { data = await geocoder.search(body); }
         finally { globalThis.fetch = originalFetch; }
         assert(!data.some((result) => result.id === 'thu-duc'));
+        for (const result of data) {
+          assert.equal(result.city, body.city);
+          assert.equal(result.ward, body.ward);
+          assert.equal(result.displayName, searchResult.displayName);
+        }
       }
     }
     else if (path.includes('/warehouses') && ['POST', 'PATCH'].includes(request.method())) {
@@ -154,7 +182,7 @@ try {
       const previous = await selectedText().textContent();
       await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).evaluate((button) => { button.click(); button.click(); });
       await expect(page.getByRole('button', { name: 'Tìm địa chỉ', exact: true })).toBeDisabled();
-      await page.getByRole('button', { name: searchResult.displayName, exact: true }).waitFor();
+      await page.getByRole('list', { name: 'Kết quả tìm địa chỉ' }).waitFor();
       assert.equal(searches, before + 1);
       await expect(map).toHaveCount(0);
       await expect(selectedText()).toHaveText(previous);
@@ -172,9 +200,9 @@ try {
         // Do not click/drag the map: Leaflet would replace the provider draft.
         // Rendering toFixed also fails at runtime if either draft field is a string.
         await expect(page.locator('section[aria-label^="Vị trí"] > p[role="status"]').last())
-          .toHaveText('10.769508, 106.690795');
+          .toHaveText(`${searchResult.latitude.toFixed(6)}, ${searchResult.longitude.toFixed(6)}`);
         await confirm.click();
-        await expect(selectedText()).toHaveText('10.769508, 106.690795');
+        await expect(selectedText()).toHaveText(`${searchResult.latitude.toFixed(6)}, ${searchResult.longitude.toFixed(6)}`);
         return;
       }
       const marker = page.locator('.leaflet-marker-draggable');
@@ -379,7 +407,7 @@ try {
   }
   if (searchMode) {
     addresses = [];
-    for (const failure of ['empty', 'error', ...(validatedSearch ? ['thu-duc', 'wrong-province', 'wrong-ward', 'conflicting-hierarchy'] : [])]) {
+    for (const failure of ['empty', 'error', ...(validatedSearch ? ['thu-duc', 'wrong-province', 'wrong-ward', 'wrong-region', 'wrong-neighbourhood', 'outside-area'] : [])]) {
       searchResponse = failure;
       await open('/addresses');
       await choose(city, 'ho chi minh', 'Hồ Chí Minh');
@@ -388,7 +416,7 @@ try {
       await page.getByLabel('Số nhà, tên đường').fill('123 Nguyễn Trãi');
       await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).click();
       await expect(page.getByText(failure !== 'error'
-        ? 'Không tìm thấy địa chỉ phù hợp với Phường Bến Thành, Hồ Chí Minh. Hãy thử địa chỉ khác hoặc đặt pin thủ công.'
+        ? 'Không tìm thấy địa chỉ chính xác. Bạn có thể đặt pin thủ công trong khu vực đã chọn.'
         : 'Không thể tìm địa chỉ lúc này. Hãy thử lại hoặc đặt pin thủ công.')).toBeVisible();
       await expect(page.getByRole('list', { name: 'Kết quả tìm địa chỉ' })).toHaveCount(0);
       await openMap();
@@ -409,7 +437,7 @@ try {
     await expect(page.getByRole('list', { name: 'Kết quả tìm địa chỉ' })).toHaveCount(0);
     await expect(map).toHaveCount(0);
     console.log(`PASS explicit search: typing 0, double-click 1, ${directSearch ? 'direct numeric draft/confirm (no map adjustment)' : 'choice/draft/drag/confirm'}, all forms, numeric request payloads, reload, stale payloads, fail/empty manual fallback, cancelled stale response`);
-    if (validatedSearch) console.log('PASS raw provider → backend filtering → UI: Thu Duc, wrong province/ward and conflicting hierarchy not selectable; manual fallback preserves canonical selection; valid pin exact and map centred');
+    if (validatedSearch) console.log('PASS raw provider → backend normalization → UI: live city anomaly selectable with canonical label and real coordinate; outside area/wrong province/region/ward not selectable; manual fallback preserves selectors');
   }
   assert.deepEqual(errors, []);
   assert.deepEqual(external, []);
