@@ -1,4 +1,4 @@
-import { api, authApi } from '../../services/api';
+import { api, authApi, logoutAuthSession } from '../../services/api';
 import type { ApiEnvelope, AuthPayload, User, UserRole } from '../../types/auth';
 
 export interface LoginInput {
@@ -30,7 +30,7 @@ export async function register(input: RegisterInput): Promise<AuthPayload> {
 }
 
 export async function logout(): Promise<void> {
-  await authApi.post('/auth/logout');
+  await logoutAuthSession();
 }
 
 export async function forgotPassword(email: string): Promise<string> {

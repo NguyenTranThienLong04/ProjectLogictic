@@ -22,6 +22,12 @@ test('rotated sessions and logout reach other tabs without echo or persistent st
     first.updateAuthSession({ accessToken: 'rotated-token', user: { id: 'customer-1' } });
     assert.equal(second.getAccessToken(), 'rotated-token');
     assert.equal(broadcasts, 1);
+    const revision = first.getAuthRevision();
+    first.updateAuthSession(null, { broadcast: false });
+    assert.equal(first.getAuthSession(), null);
+    assert.ok(first.getAuthRevision() > revision);
+    assert.equal(second.getAccessToken(), 'rotated-token');
+    assert.equal(broadcasts, 1, 'one tab failing restore must not log out another tab');
     second.updateAuthSession(null);
     assert.equal(first.getAuthSession(), null);
     assert.equal(broadcasts, 2);

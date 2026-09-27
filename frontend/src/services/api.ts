@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios';
-import type { InternalAxiosRequestConfig } from 'axios';
+import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import type { ApiEnvelope, AuthPayload } from '../types/auth';
-import { getAccessToken, getAuthSession, updateAuthSession } from './auth-session';
+import { getAccessToken, getAuthRevision, getAuthSession, updateAuthSession } from './auth-session';
 import { API_BASE_URL } from './runtime-config';
 
 export const authApi = axios.create({
@@ -26,27 +26,84 @@ interface RetryableRequest extends InternalAxiosRequestConfig {
 }
 
 let refreshPromise: Promise<AuthPayload> | null = null;
+let logoutPromise: Promise<void> | null = null;
+
+export function isInvalidRefresh(error: unknown): boolean {
+  return (
+    axios.isAxiosError<{ code?: string }>(error) &&
+    error.response?.status === 401 &&
+    error.response.data?.code === 'AUTH_REFRESH_TOKEN_INVALID'
+  );
+}
+
+export class AuthSessionChangedError extends Error {
+  constructor() {
+    super('Session changed while restoring authentication');
+  }
+}
+
+function withAuthLock<T>(action: () => Promise<T>): Promise<T> {
+  return navigator.locks ? navigator.locks.request('logistics-auth-refresh', action) : action();
+}
 
 export async function refreshAuthSession(): Promise<AuthPayload> {
-  const previousToken = getAccessToken();
-  const rotate = () =>
-    authApi.post<ApiEnvelope<AuthPayload>>('/auth/refresh').then((response) => {
+  if (logoutPromise) {
+    await logoutPromise;
+    throw new AuthSessionChangedError();
+  }
+  if (refreshPromise) return refreshPromise;
+  const startedAt = getAuthRevision();
+  const changedSession = (): AuthPayload => {
+    const session = getAuthSession();
+    if (session) return session;
+    throw new AuthSessionChangedError();
+  };
+  refreshPromise = withAuthLock(async () => {
+    // A queued tab can reuse a rotation received through BroadcastChannel.
+    if (getAuthRevision() !== startedAt) return changedSession();
+    try {
+      const requestRefresh = () => authApi.post<ApiEnvelope<AuthPayload>>('/auth/refresh');
+      let response: AxiosResponse<ApiEnvelope<AuthPayload>>;
+      try {
+        response = await requestRefresh();
+      } catch (error) {
+        if (navigator.locks || !isInvalidRefresh(error)) throw error;
+        // Without Web Locks, a sibling may have consumed the shared cookie.
+        // Allow its broadcast to arrive, then retry the current cookie once.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        if (getAuthRevision() !== startedAt) return changedSession();
+        response = await requestRefresh();
+      }
+      // A late response must not undo logout, login or a newer cross-tab session.
+      if (getAuthRevision() !== startedAt) return changedSession();
       updateAuthSession(response.data.data);
       return response.data.data;
-    });
-  refreshPromise ??= (
-    navigator.locks
-      ? navigator.locks.request('logistics-auth-refresh', async () => {
-          const session = getAuthSession();
-          if (session && session.accessToken !== previousToken) return session;
-          return rotate();
-        })
-      : rotate()
-  ).finally(() => {
+    } catch (error) {
+      if (getAuthRevision() !== startedAt) return changedSession();
+      if (isInvalidRefresh(error)) updateAuthSession(null, { broadcast: false });
+      throw error;
+    }
+  }).finally(() => {
     refreshPromise = null;
   });
 
   return refreshPromise;
+}
+
+export async function logoutAuthSession(): Promise<void> {
+  if (logoutPromise) return logoutPromise;
+  // Do not report guest before the cookie is revoked: a reload in that gap
+  // could restore it. Serialize logout after any already-started rotation.
+  logoutPromise = (async () => {
+    await refreshPromise?.catch(() => undefined);
+    await withAuthLock(async () => {
+      await authApi.post('/auth/logout');
+      updateAuthSession(null);
+    });
+  })().finally(() => {
+    logoutPromise = null;
+  });
+  return logoutPromise;
 }
 
 api.interceptors.request.use((config) => {
@@ -75,7 +132,6 @@ api.interceptors.response.use(
           ? current
           : await refreshAuthSession();
     } catch (refreshError) {
-      updateAuthSession(null);
       return Promise.reject(refreshError);
     }
     request.headers.set('Authorization', `Bearer ${session.accessToken}`);

@@ -1,7 +1,9 @@
-import type { PropsWithChildren } from 'react';
+import { useState, type PropsWithChildren } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { LogoMark } from '../../../components/logo-mark';
 import { Button } from '../../../components/ui/button';
+import { ErrorSummary } from '../../../components/ui/error-summary';
+import { getApiErrorMessage } from '../../../services/api-error';
 import type { UserRole } from '../../../types/auth';
 import { NotificationBell } from '../../notifications/notification-bell';
 import { useAuth } from '../auth-context';
@@ -86,11 +88,18 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 export function AccountLayout({ children }: PropsWithChildren) {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string>();
   const handleLogout = async () => {
+    setLoggingOut(true);
+    setLogoutError(undefined);
     try {
       await logout();
-    } finally {
       navigate('/login', { replace: true });
+    } catch (error) {
+      setLogoutError(getApiErrorMessage(error));
+    } finally {
+      setLoggingOut(false);
     }
   };
   const primary = user ? primaryNavigation[user.role] : [];
@@ -142,6 +151,7 @@ export function AccountLayout({ children }: PropsWithChildren) {
             <Button
               className="col-span-2 min-h-12 w-full px-4 text-sm sm:col-span-1 sm:w-auto"
               onClick={handleLogout}
+              loading={loggingOut}
               variant="secondary"
             >
               Đăng xuất
@@ -154,6 +164,7 @@ export function AccountLayout({ children }: PropsWithChildren) {
         className={`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 ${denseRole ? 'py-6 sm:py-8 lg:py-10' : 'py-8 sm:py-10'}`}
         id="account-content"
       >
+        <ErrorSummary message={logoutError} />
         {children}
       </main>
     </div>

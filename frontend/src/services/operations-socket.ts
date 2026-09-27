@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
 import { refreshAuthSession } from './api';
-import { getAccessToken, updateAuthSession } from './auth-session';
+import { getAccessToken } from './auth-session';
 import { SOCKET_BASE_URL } from './runtime-config';
 
 export function operationsSocketUrl(): string {
@@ -28,7 +28,9 @@ export function createOperationsSocket(): Socket {
     refreshing = true;
     void refreshAuthSession()
       .then(() => socket.connect())
-      .catch(() => updateAuthSession(null))
+      // API refresh owns invalid-session handling. A network outage only stops
+      // this connection; it must not broadcast a logout to every open tab.
+      .catch(() => socket.disconnect())
       .finally(() => {
         refreshing = false;
       });

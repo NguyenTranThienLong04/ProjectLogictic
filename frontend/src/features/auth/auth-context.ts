@@ -2,11 +2,12 @@ import { createContext, useContext } from 'react';
 import type { AuthPayload, User } from '../../types/auth';
 import type { LoginInput, RegisterInput } from './auth-api';
 
-export type AuthStatus = 'loading' | 'authenticated' | 'guest';
+export type AuthStatus = 'loading' | 'restore-error' | 'authenticated' | 'guest';
 
 export interface AuthContextValue {
   status: AuthStatus;
   user: User | null;
+  retryRestore: () => void;
   login: (input: LoginInput) => Promise<AuthPayload>;
   register: (input: RegisterInput) => Promise<AuthPayload>;
   logout: () => Promise<void>;

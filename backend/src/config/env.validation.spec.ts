@@ -108,6 +108,22 @@ describe('validateEnvironment', () => {
     ).toThrow('REFRESH_COOKIE_NAME must use the __Secure- prefix in production');
   });
 
+  it('allows cross-site refresh only with the production Secure cookie policy', () => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, REFRESH_COOKIE_SAME_SITE: 'none' }),
+    ).toThrow('REFRESH_COOKIE_SAME_SITE=none requires production HTTPS secure cookies');
+    const result = validateEnvironment({
+      ...validEnvironment,
+      NODE_ENV: 'production',
+      FRONTEND_URL: 'https://logistics-staging-web.onrender.com',
+      REDIS_URL: 'rediss://cache.example.test:6379',
+      JWT_ACCESS_SECRET: 'a-random-production-secret-that-is-at-least-32-characters',
+      REFRESH_COOKIE_SAME_SITE: 'none',
+    });
+    expect(result.REFRESH_COOKIE_SAME_SITE).toBe('none');
+    expect(result.REFRESH_COOKIE_NAME).toBe('__Secure-logistics_refresh');
+  });
+
   it('requires complete SMTP settings only when email delivery is enabled', () => {
     expect(() =>
       validateEnvironment({

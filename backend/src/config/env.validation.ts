@@ -173,6 +173,9 @@ export function validateEnvironment(environment: Environment): Environment {
   if (!allowedCookieSameSiteValues.has(refreshCookieSameSite)) {
     throw new Error('REFRESH_COOKIE_SAME_SITE must be lax, strict, or none');
   }
+  if (refreshCookieSameSite === 'none' && nodeEnvironment !== 'production') {
+    throw new Error('REFRESH_COOKIE_SAME_SITE=none requires production HTTPS secure cookies');
+  }
 
   const emailDeliveryEnabled = booleanString(environment, 'EMAIL_DELIVERY_ENABLED', false);
   const smtpSecure = booleanString(environment, 'SMTP_SECURE', false);

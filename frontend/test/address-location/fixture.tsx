@@ -17,6 +17,7 @@ import '../../src/styles.css';
 const unavailable = async () => { throw new Error('Auth actions are outside this fixture'); };
 const auth: AuthContextValue = {
   status: 'authenticated',
+  retryRestore: () => {},
   user: { id: 'test-customer', role: 'CUSTOMER', status: 'ACTIVE', email: 'fixture@example.test',
     fullName: 'Test Customer', phone: '0901234567', mustChangePassword: false, createdAt: '', updatedAt: '' },
   login: unavailable, register: unavailable, logout: unavailable, updateUser: () => { throw new Error('Unexpected user update'); },
