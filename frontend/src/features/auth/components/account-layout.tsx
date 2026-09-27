@@ -50,6 +50,7 @@ const primaryNavigation: Record<UserRole, NavigationItem[]> = {
 const secondaryNavigation: Partial<Record<UserRole, NavigationItem[]>> = {
   DRIVER: [
     { label: 'Bàn giao phí', to: '/driver/shipping-fees' },
+    { label: 'Bàn giao COD', to: '/driver/cod' },
     { label: 'Chuyến liên kho', to: '/driver/line-haul' },
   ],
   DISPATCHER: [

@@ -318,10 +318,38 @@ describe('ShipmentsService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(findFirst).toHaveBeenCalledWith({
       where: { id: shipmentId, customerId },
-      select: { id: true },
+      select: { id: true, codTransaction: { select: { status: true } } },
     });
     expect(getCache).not.toHaveBeenCalled();
   });
+
+  it.each(['COLLECTED', 'REMITTED', 'SETTLED', 'DISPUTED', null])(
+    'reads current COD %s even when shipment detail is cached',
+    async (status) => {
+      const prisma = {
+        shipment: {
+          findFirst: jest.fn(() =>
+            Promise.resolve({
+              id: shipmentId,
+              codTransaction: status ? { status } : null,
+            }),
+          ),
+        },
+      } as unknown as PrismaService;
+      const cache = cacheService({
+        get: jest.fn(() =>
+          Promise.resolve({
+            id: shipmentId,
+            shippingFee: { status: 'COLLECTED' },
+            codStatus: 'COLLECTED',
+          }),
+        ) as CacheService['get'],
+      });
+      const result = await serviceWith(prisma, cache).getOwned(customerId, shipmentId);
+      expect(result.codStatus).toBe(status);
+      expect(result.shippingFee.status).toBe('COLLECTED');
+    },
+  );
 
   it('cancels with optimistic concurrency and appends tracking and audit records', async () => {
     const current = shipment();

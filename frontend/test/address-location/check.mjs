@@ -3,6 +3,7 @@ import { chromium, expect } from '@playwright/test';
 import { build, preview } from 'vite';
 import { fileURLToPath } from 'node:url';
 const validatedSearch = process.argv.includes('--validated-search');
+const currentLocation = process.argv.includes('--current-location');
 const directSearch = validatedSearch || process.argv.includes('--direct-search');
 const searchMode = directSearch || process.argv.includes('--search');
 
@@ -34,6 +35,10 @@ let browser;
 try {
   browser = await chromium.launch();
   const page = await browser.newPage({ reducedMotion: 'reduce' });
+  if (currentLocation) {
+    await page.context().grantPermissions(['geolocation']);
+    await page.context().setGeolocation({ latitude: 10.769508432, longitude: 106.690795367 });
+  }
   const errors = [];
   const external = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -175,6 +180,33 @@ try {
   const confirm = page.getByRole('button', { name: 'Xác nhận vị trí' });
   const openMap = async () => page.getByRole('button', { name: /Chọn vị trí trên bản đồ|Thay đổi vị trí/ }).click();
   const pin = async () => {
+    if (currentLocation) {
+      const previousCity = await city.inputValue();
+      const previousWard = await ward.inputValue();
+      const previous = await selectedText().textContent();
+      const previousSearch = searchResponse;
+      searchResponse = 'empty';
+      await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).click();
+      await expect(page.getByText('Không tìm thấy địa chỉ chính xác.', { exact: false })).toBeVisible();
+      searchResponse = previousSearch;
+      await page.getByRole('button', { name: 'Dùng vị trí hiện tại', exact: true }).click();
+      await expect(page.locator('.leaflet-marker-draggable')).toHaveCount(1);
+      await expect(page.locator('section[aria-label^="Vị trí"] > p[role="status"]').last()).toHaveText('10.769508, 106.690795');
+      await expect(selectedText()).toHaveText(previous);
+      await expect(city).toHaveValue(previousCity);
+      await expect(ward).toHaveValue(previousWard);
+      await expect.poll(() => page.locator('.leaflet-tile[src*=".org/16/"]').count()).toBeGreaterThan(0);
+      await expect.poll(() => page.evaluate(() => {
+        const mapBox = document.querySelector('.leaflet-container').getBoundingClientRect();
+        const markerBox = document.querySelector('.leaflet-marker-draggable').getBoundingClientRect();
+        return Math.max(Math.abs(markerBox.x + markerBox.width / 2 - mapBox.x - mapBox.width / 2),
+          Math.abs(markerBox.y + markerBox.height / 2 - mapBox.y - mapBox.height / 2));
+      })).toBeLessThan(2);
+      if (previousCity === 'Hà Nội') await expect(page.getByText('Vị trí hiện tại có vẻ không khớp', { exact: false })).toBeVisible();
+      await confirm.click();
+      await expect(selectedText()).toHaveText('10.769508, 106.690795');
+      return;
+    }
     if (searchMode) {
       const previousCity = await city.inputValue();
       const previousWard = await ward.inputValue();
@@ -438,6 +470,43 @@ try {
     await expect(map).toHaveCount(0);
     console.log(`PASS explicit search: typing 0, double-click 1, ${directSearch ? 'direct numeric draft/confirm (no map adjustment)' : 'choice/draft/drag/confirm'}, all forms, numeric request payloads, reload, stale payloads, fail/empty manual fallback, cancelled stale response`);
     if (validatedSearch) console.log('PASS raw provider → backend normalization → UI: live city anomaly selectable with canonical label and real coordinate; outside area/wrong province/region/ward not selectable; manual fallback preserves selectors');
+  }
+  if (currentLocation) {
+    addresses = [];
+    await open('/addresses');
+    await choose(city, 'ho chi minh', 'Hồ Chí Minh');
+    await choose(ward, 'ben thanh', 'Bến Thành');
+    await page.getByLabel('Số nhà, tên đường').fill('GPS error test');
+    for (const [code, message] of [[1, 'Quyền vị trí đã bị từ chối.'], [2, 'Không lấy được vị trí thiết bị.'], [3, 'Lấy vị trí quá thời gian chờ.']]) {
+      await page.evaluate((code) => Object.defineProperty(navigator, 'geolocation', { configurable: true,
+        value: { getCurrentPosition(_success, failure) { failure({ code }); } },
+      }), code);
+      await page.getByRole('button', { name: 'Dùng vị trí hiện tại', exact: true }).click();
+      await expect(page.getByRole('alert').filter({ hasText: message })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Tìm địa chỉ', exact: true })).toBeEnabled();
+      await openMap();
+      await map.click({ position: { x: 100, y: 120 } });
+      await confirm.click();
+      await expect(city).toHaveValue('Hồ Chí Minh');
+      await expect(ward).toHaveValue('Bến Thành');
+    }
+    await page.evaluate(() => Object.defineProperty(navigator, 'geolocation', { configurable: true,
+      value: { getCurrentPosition(success) { window.pendingGps = success; } },
+    }));
+    await page.getByRole('button', { name: 'Dùng vị trí hiện tại', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Đang lấy vị trí...', exact: true })).toBeDisabled();
+    await page.getByLabel('Số nhà, tên đường').fill('Changed during GPS');
+    await page.evaluate(() => window.pendingGps({ coords: { latitude: 21, longitude: 105 }, timestamp: Date.now() }));
+    await expect(map).toHaveCount(0);
+    await expect(stale()).toBeVisible();
+    await expect(selectedText()).toHaveText('Chưa chọn vị trí');
+    // Closing an open picker fences a late device callback as well.
+    await openMap();
+    await page.getByRole('button', { name: 'Dùng vị trí hiện tại', exact: true }).click();
+    await page.locator('section[aria-label^="Vị trí"]').getByRole('button', { name: 'Hủy', exact: true }).click();
+    await page.evaluate(() => window.pendingGps({ coords: { latitude: 21, longitude: 105 }, timestamp: Date.now() }));
+    await expect(map).toHaveCount(0);
+    console.log('PASS GPS denied/unavailable/timeout: retry/search/manual preserved; loading; stale callback after address change/cancel ignored; no Driver endpoint calls');
   }
   assert.deepEqual(errors, []);
   assert.deepEqual(external, []);

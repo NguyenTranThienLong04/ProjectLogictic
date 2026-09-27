@@ -36,6 +36,11 @@ export class CodController {
   @Get('dashboard') @Roles(UserRole.ADMIN) dashboard() {
     return this.cod.dashboard();
   }
+  @Get('mine')
+  @Roles(UserRole.DRIVER)
+  mine(@CurrentUser() actor: AuthenticatedUser) {
+    return this.cod.mine(actor);
+  }
   @Post(':id/settle')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)

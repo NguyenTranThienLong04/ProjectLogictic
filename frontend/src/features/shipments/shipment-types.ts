@@ -1,3 +1,5 @@
+import type { CodStatus } from '../cod/cod-api';
+
 export type ShipmentStatus =
   | 'PENDING'
   | 'CONFIRMED'
@@ -89,6 +91,7 @@ export interface TrackingEvent {
 }
 
 export interface Shipment {
+  codStatus?: CodStatus | null;
   id: string;
   trackingCode: string;
   status: ShipmentStatus;

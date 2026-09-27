@@ -21,6 +21,22 @@ function transaction(prisma: PrismaService) {
 }
 
 describe('CodService concurrency guards', () => {
+  it('scopes Driver COD rows and totals to the authenticated collecting driver', async () => {
+    const findUnique = jest.fn(() => Promise.resolve({ id: driverProfileId }));
+    const findMany = jest.fn(() => Promise.resolve([]));
+    const groupBy = jest.fn(() => Promise.resolve([]));
+    const prisma = {
+      driverProfile: { findUnique },
+      cODTransaction: { findMany, groupBy },
+    } as unknown as PrismaService;
+    await new CodService(prisma).mine(driverActor);
+    expect(findUnique).toHaveBeenCalledWith({ where: { userId: driverActor.id } });
+    for (const query of [findMany, groupBy]) {
+      expect(query).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { collectedByDriverId: driverProfileId } }),
+      );
+    }
+  });
   it('remits with a conditional COLLECTED update and does not audit a lost race', async () => {
     const cod = {
       id: codId,

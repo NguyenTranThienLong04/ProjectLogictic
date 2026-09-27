@@ -60,6 +60,7 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
   const shipmentIds: string[] = [];
   let driverToken = '';
   let adminToken = '';
+  let customerToken = '';
   let driverProfileId = '';
   let adminId = '';
   let customerId = '';
@@ -154,6 +155,7 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
     };
     driverToken = await login(driverEmail);
     adminToken = await login(adminEmail);
+    customerToken = await login(customerEmail);
   });
 
   afterAll(async () => {
@@ -172,6 +174,7 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
     await prisma.auditLog.deleteMany({ where: { actorId: { in: userIds } } });
     await prisma.shipment.deleteMany({ where: { id: { in: shipmentIds } } });
     await prisma.driverProfile.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.customerAddress.deleteMany({ where: { customerId: { in: userIds } } });
     await prisma.authSession.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.passwordResetToken.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
@@ -215,6 +218,95 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
         where: { action: 'DELIVERY_COMPLETE', entityId: deliveryAttempt.id },
       }),
     ).toBe(1);
+    const cod = await prisma.cODTransaction.findUniqueOrThrow({
+      where: { shipmentId: shipment.id },
+    });
+    expect(cod).toMatchObject({
+      status: 'COLLECTED',
+      expectedAmount: 275_000,
+      collectedAmount: 275_000,
+    });
+    const readOverview = async () =>
+      bodyFrom<{ overview: { codUnsettled: number } }>(
+        await request(server)
+          .get('/api/v1/dashboards/customer')
+          .set('Authorization', `Bearer ${customerToken}`)
+          .expect(200),
+      ).data.overview;
+    const readDetail = async () =>
+      bodyFrom<{ codStatus: string }>(
+        await request(server)
+          .get(`/api/v1/shipments/${shipment.id}`)
+          .set('Authorization', `Bearer ${customerToken}`)
+          .expect(200),
+      ).data;
+    expect((await readOverview()).codUnsettled).toBe(275_000);
+    expect((await readDetail()).codStatus).toBe('COLLECTED');
+    const mine = bodyFrom<{ items: Array<{ id: string }> }>(
+      await request(server)
+        .get('/api/v1/cod/mine')
+        .set('Authorization', `Bearer ${driverToken}`)
+        .expect(200),
+    ).data;
+    expect(mine.items.map((item) => item.id)).toContain(cod.id);
+    await request(server)
+      .get('/api/v1/cod/mine')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .expect(403);
+    await request(server)
+      .post(`/api/v1/cod/${cod.id}/settle`)
+      .set('Authorization', `Bearer ${driverToken}`)
+      .expect(403);
+    await request(server)
+      .post(`/api/v1/cod/shipments/${shipment.id}/remit`)
+      .set('Authorization', `Bearer ${driverToken}`)
+      .send({ amount: 275_000 })
+      .expect(200);
+    expect((await readOverview()).codUnsettled).toBe(275_000);
+    expect((await readDetail()).codStatus).toBe('REMITTED');
+    await request(server)
+      .post(`/api/v1/cod/${cod.id}/settle`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect((await readOverview()).codUnsettled).toBe(0);
+    expect((await readDetail()).codStatus).toBe('SETTLED');
+    expect(
+      await prisma.shippingFeeTransaction.findUnique({ where: { shipmentId: shipment.id } }),
+    ).toMatchObject({ status: 'COLLECTED', expectedAmount: 30_000, collectedAmount: 30_000 });
+  });
+
+  it('persists confirmed six-decimal device coordinates without replacing administrative fields', async () => {
+    const address = {
+      label: 'GPS',
+      contactName: 'GPS Customer',
+      phone: '0901234567',
+      streetAddress: '123 Nguyễn Trãi',
+      city: 'Hồ Chí Minh',
+      ward: 'Bến Thành',
+      district: '',
+      latitude: 10.769508,
+      longitude: 106.690795,
+    };
+    const created = bodyFrom<{ id: string }>(
+      await request(server)
+        .post('/api/v1/addresses')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .send(address)
+        .expect(201),
+    ).data;
+    const list = bodyFrom<Array<{ id: string }>>(
+      await request(server)
+        .get('/api/v1/addresses')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .expect(200),
+    ).data;
+    expect(list.find((item) => item.id === created.id)).toMatchObject(address);
+    const stored = await prisma.customerAddress.findUniqueOrThrow({ where: { id: created.id } });
+    expect({
+      ...stored,
+      latitude: Number(stored.latitude),
+      longitude: Number(stored.longitude),
+    }).toMatchObject(address);
   });
 
   it('allows only one remittance state transition and audit under concurrent requests', async () => {

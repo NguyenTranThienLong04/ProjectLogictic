@@ -9,6 +9,9 @@ import { QuotePage } from '../../src/features/pricing/quote-page';
 import { PricingConfigPage } from '../../src/features/pricing/pricing-config-page';
 import { AdminWarehousesPage } from '../../src/features/warehouses/pages/admin-warehouses-page';
 import { AdminDriversPage } from '../../src/features/operations/admin-drivers-page';
+import { CodDashboardPage } from '../../src/features/cod/cod-dashboard-page';
+import { CustomerDashboardPage } from '../../src/features/dashboards/customer-dashboard-page';
+import { ShipmentDetailPage } from '../../src/features/shipments/shipment-detail-page';
 import '../../src/styles.css';
 
 const unavailable = async () => { throw new Error('Auth actions are outside this fixture'); };
@@ -21,9 +24,14 @@ const auth: AuthContextValue = {
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const page = new URLSearchParams(location.search).get('screen') ?? '/addresses';
 if (page.startsWith('/admin/') && auth.user) auth.user.role = 'ADMIN';
+if (page.startsWith('/driver/') && auth.user) auth.user.role = 'DRIVER';
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={client}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={[page]}>
     <Routes>
+      <Route path="/driver/cod" element={<CodDashboardPage driver />} />
+      <Route path="/admin/cod" element={<CodDashboardPage />} />
+      <Route path="/customer/dashboard" element={<CustomerDashboardPage />} />
+      <Route path="/cod-shipments/:id" element={<ShipmentDetailPage />} />
       <Route path="/admin/pricing" element={<PricingConfigPage />} />
       <Route path="/admin/drivers" element={<AdminDriversPage />} />
       <Route path="/admin/warehouses" element={<AdminWarehousesPage />} />

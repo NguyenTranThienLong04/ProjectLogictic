@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ShipmentStatusBadge } from '../../components/shipment-status-badge';
 import { ShipmentTimeline } from '../../components/shipment-timeline';
 import { Button } from '../../components/ui/button';
+import { CodStatusBadge } from '../../components/ui/status-badge';
 import { EmptyState } from '../../components/ui/empty-state';
 import { ErrorSummary } from '../../components/ui/error-summary';
 import { ErrorState } from '../../components/ui/error-state';
@@ -28,6 +29,7 @@ export function ShipmentDetailPage() {
     queryKey: ['shipment', id],
     queryFn: () => getShipment(id),
     enabled: Boolean(id),
+    refetchInterval: 30_000,
   });
   const cancelMutation = useMutation({
     mutationFn: () => cancelShipment(id, reason),
@@ -101,6 +103,10 @@ export function ShipmentDetailPage() {
                 />
                 <section className="rounded-surface border border-orange-200 bg-orange-50 p-5">
                   <h2 className="font-semibold text-ink">COD</h2>
+                  <div className="mt-3">
+                    {shipmentQuery.data.codStatus ? <CodStatusBadge status={shipmentQuery.data.codStatus} />
+                      : <p className="text-sm text-muted-foreground">{shipmentQuery.data.codAmount > 0 ? 'Chưa thu COD' : 'Không thu COD'}</p>}
+                  </div>
                   <dl className="mt-4">
                     <Detail
                       label="Tiền thu hộ hàng hóa"
@@ -109,6 +115,7 @@ export function ShipmentDetailPage() {
                   </dl>
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">
                     COD là khoản thu hộ hàng hóa, tách biệt với phí vận chuyển.
+                    {' '}Đã quyết toán là hoàn tất đối soát COD, không xác nhận đã chuyển tiền cho khách.
                   </p>
                 </section>
                 {shipmentQuery.data.status === 'OUT_FOR_DELIVERY' ? (

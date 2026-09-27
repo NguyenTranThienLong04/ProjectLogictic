@@ -142,7 +142,7 @@ export const codStatusBadgeConfig = {
     dot: 'bg-orange-500',
   },
   REMITTED: {
-    label: 'Tài xế đã nộp COD',
+    label: 'Đã bàn giao COD',
     surface: 'border-orange-400 bg-orange-200 text-orange-950',
     dot: 'bg-orange-600',
   },

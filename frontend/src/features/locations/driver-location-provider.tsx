@@ -6,9 +6,9 @@ import { subscribeToAuthSession } from '../../services/auth-session';
 import { getMyDriverProfile } from '../operations/operations-api';
 import {
   DRIVER_GPS_INTERVAL_MS,
-  locateBrowserPosition,
   startDriverGpsPublisher,
 } from './driver-gps-publisher';
+import { locateBrowserPosition } from './browser-location';
 import { Button } from '../../components/ui/button';
 import { getApiErrorMessage } from '../../services/api-error';
 import { createOperationsSocket } from '../../services/operations-socket';

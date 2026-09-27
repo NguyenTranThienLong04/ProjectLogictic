@@ -27,6 +27,8 @@ SearchFilter · NotificationBell · Timeline · Map
 
 ### LocationPicker
 
+- **Dùng vị trí hiện tại** nằm cạnh Tìm địa chỉ, dùng browser geolocation helper chung với Driver (không API publish/simulation). GPS chỉ tạo draft + focus zoom 16; Confirm mới ghi tọa độ tối đa 6 chữ số thập phân. Không reverse-geocode hoặc sửa province/ward. Permission denied/timeout/unavailable có hướng dẫn và giữ Search/manual pin. Callback cũ bị bỏ khi đổi địa chỉ, đóng picker hoặc chọn điểm khác. Cảnh báo khoảng cách GPS tới điểm ward >20 km, hoặc province >200 km nếu thiếu ward; đây là heuristic cảnh báo, không kiểm tra polygon hay chặn lưu.
+
 - Address search: local province/ward + street → explicit **Tìm địa chỉ** → up to 5 results → user chooses a result → draft marker at zoom 16 → optional drag → **Xác nhận vị trí**. Never search on typing/change/blur, never auto-select the first result, never replace local administrative fields with provider text. Shared `AddressSearch` inside `LocationPicker` serves Saved Address, Create Shipment and Quote. Pending search disables the button; address fingerprint changes abort/discard old results. Empty/error retains manual map selection and ward → province → Vietnam focus. Keep visible `Search by LocationIQ.com` link alongside existing OSM attribution. Only Confirm writes the coordinate/fingerprint to form state; all existing stale-coordinate rules below remain authoritative.
 
 - Viewport khi mở: **coordinate hợp lệ đã confirm cho fingerprint hiện tại (zoom 16) → ward/commune point trong tỉnh đã chọn (zoom 15) → province point (zoom 12) → Việt Nam `[16, 106]` (zoom 6)**. Điểm từ dataset chỉ gần khu vực hành chính, không geocode số nhà/tên đường. Form Saved Address/Create Shipment/Báo giá truyền `street`, `ward`, `district`, `city` hiện tại.
@@ -112,7 +114,7 @@ Tên enum giống nhau không bắt buộc cùng một shade nếu mức độ �
 |---|---|---|---|---|---|
 | `PENDING` | Chờ thu COD | `bg-orange-50` | `text-orange-800` | `border-orange-200` | `bg-orange-400` |
 | `COLLECTED` | Đã thu COD | `bg-orange-100` | `text-orange-900` | `border-orange-300` | `bg-orange-500` |
-| `REMITTED` | Tài xế đã nộp COD | `bg-orange-200` | `text-orange-950` | `border-orange-400` | `bg-orange-600` |
+| `REMITTED` | Đã bàn giao COD | `bg-orange-200` | `text-orange-950` | `border-orange-400` | `bg-orange-600` |
 | `SETTLED` | Đã quyết toán COD | `bg-emerald-100` | `text-emerald-900` | `border-emerald-300` | `bg-emerald-600` |
 | `DISPUTED` | COD đang tranh chấp | `bg-red-600` | `text-white` | `border-red-700` | `bg-white` |
 

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../../components/ui/button';
 import { searchAddress, type AddressSearchResult } from './location-api';
 import type { LocationAddressContext } from './location-viewport';
 import { findProvince, findWard } from '../addresses/administrative-model';
 
-export function AddressSearch({ address, disabled, onSelect }: {
+export function AddressSearch({ address, disabled, onSelect, actions }: {
+  actions?: ReactNode;
   address: LocationAddressContext;
   disabled: boolean;
   onSelect: (result: AddressSearchResult) => void;
@@ -39,9 +40,12 @@ export function AddressSearch({ address, disabled, onSelect }: {
   }
 
   return <div className="space-y-3">
+    <div className="flex flex-wrap gap-3">
     <Button variant="secondary" loading={loading}
       disabled={disabled || (address.street?.trim().length ?? 0) < 3 || !ward}
       onClick={() => void search()}>Tìm địa chỉ</Button>
+    {actions}
+    </div>
     <p className="text-sm text-muted-foreground">
       <a className="focus-ring text-primary underline" href="https://locationiq.com" target="_blank" rel="noreferrer">Search by LocationIQ.com</a>
     </p>

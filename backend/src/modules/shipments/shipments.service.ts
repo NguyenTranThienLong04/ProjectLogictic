@@ -211,12 +211,14 @@ export class ShipmentsService {
   async getOwned(customerId: string, shipmentId: string): Promise<ShipmentResponse> {
     const owned = await this.prisma.shipment.findFirst({
       where: { id: shipmentId, customerId },
-      select: { id: true },
+      select: { id: true, codTransaction: { select: { status: true } } },
     });
     if (!owned) throw this.notFound();
     const cacheKey = this.cache.shipmentSummaryKey(shipmentId);
     const cached = await this.cache.get<ShipmentResponse>(cacheKey);
-    if (cached?.shippingFee) return cached;
+    // COD changes independently of shipment lifecycle/cache invalidation.
+    const codStatus = owned.codTransaction?.status ?? null;
+    if (cached?.shippingFee) return { ...cached, codStatus };
     const shipment = await this.prisma.shipment.findUniqueOrThrow({
       where: { id: shipmentId },
       include: {
@@ -224,7 +226,7 @@ export class ShipmentsService {
         shippingFeeTransaction: true,
       },
     });
-    const response = this.toResponse(shipment);
+    const response = { ...this.toResponse(shipment), codStatus };
     await this.cache.set(cacheKey, response, this.cache.shipmentTtlSeconds);
     return response;
   }

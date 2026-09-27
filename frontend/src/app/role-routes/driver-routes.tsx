@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { CodDashboardPage } from '../../features/cod/cod-dashboard-page';
 import { DriverLineHaulPage } from '../../features/locations/driver-line-haul-page';
 import { DriverAssignmentsPage } from '../../features/operations/driver-assignments-page';
 import { DriverDeliveriesPage } from '../../features/operations/driver-deliveries-page';
@@ -25,6 +26,7 @@ export function DriverRoutes() {
       <Route element={<DriverMapPage />} path="/driver/map" />
       <Route element={<DriverLineHaulPage />} path="/driver/line-haul" />
       <Route element={<DriverShippingFeesPage />} path="/driver/shipping-fees" />
+      <Route element={<CodDashboardPage driver />} path="/driver/cod" />
       <Route element={<Navigate replace to="/driver/dashboard" />} path="*" />
     </Routes>
   );

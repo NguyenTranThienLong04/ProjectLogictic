@@ -80,18 +80,3 @@ export function startDriverGpsPublisher(options: {
   void Promise.resolve().then(tick);
   return stop;
 }
-
-export function locateBrowserPosition(): Promise<Sample> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocation unavailable'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      ({ coords, timestamp }) =>
-        resolve({ latitude: coords.latitude, longitude: coords.longitude, timestamp }),
-      reject,
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 },
-    );
-  });
-}

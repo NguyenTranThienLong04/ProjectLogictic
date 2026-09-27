@@ -1,4 +1,5 @@
 import type {
+  CODTransactionStatus,
   Shipment,
   ShipmentStatus,
   ShippingFeePayer,
@@ -54,6 +55,7 @@ export interface TrackingEventResponse {
 }
 
 export interface ShipmentResponse {
+  codStatus?: CODTransactionStatus | null;
   id: string;
   trackingCode: string;
   status: ShipmentStatus;

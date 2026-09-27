@@ -10,7 +10,7 @@ import { DashboardOverviewGrid, RecentShipmentsTable } from './dashboard-compone
 import { getCustomerDashboard } from './dashboard-api';
 
 export function CustomerDashboardPage() {
-  const dashboard = useQuery({ queryKey: ['customer-dashboard'], queryFn: getCustomerDashboard });
+  const dashboard = useQuery({ queryKey: ['customer-dashboard'], queryFn: getCustomerDashboard, refetchInterval: 30_000 });
   if (dashboard.isPending) {
     return (
       <AccountLayout>
@@ -42,6 +42,7 @@ export function CustomerDashboardPage() {
         ) : dashboard.data ? (
           <div className="mt-6">
             <DashboardOverviewGrid overview={dashboard.data.overview} />
+            <p className="mt-3 text-sm text-muted-foreground">COD chưa quyết toán: tiền đã thu nhưng chưa hoàn tất bàn giao/đối soát.</p>
             <RecentShipmentsTable rows={dashboard.data.recentShipments} />
           </div>
         ) : null}

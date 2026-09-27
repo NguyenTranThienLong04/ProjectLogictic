@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button } from '../../components/ui/button';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { DataTable } from '../../components/ui/data-table';
 import type { DataTableColumn } from '../../components/ui/data-table';
 import { ErrorSummary } from '../../components/ui/error-summary';
@@ -10,19 +11,26 @@ import { CodStatusBadge } from '../../components/ui/status-badge';
 import { getApiErrorMessage } from '../../services/api-error';
 import { vndFormatter } from '../../utils/format';
 import { AccountLayout } from '../auth/components/account-layout';
-import { getCodDashboard, settleCod } from './cod-api';
+import { getCodDashboard, getMyCod, remitCod, settleCod } from './cod-api';
 import type { CodTransaction } from './cod-api';
 
-export function CodDashboardPage() {
+export function CodDashboardPage({ driver = false }: { driver?: boolean }) {
   const client = useQueryClient();
   const [successMessage, setSuccessMessage] = useState('');
-  const query = useQuery({ queryKey: ['cod-dashboard'], queryFn: getCodDashboard });
+  const [selected, setSelected] = useState<CodTransaction | null>(null);
+  const query = useQuery({ queryKey: ['cod-dashboard', driver ? 'mine' : 'all'], queryFn: driver ? getMyCod : getCodDashboard });
   const settle = useMutation({
-    mutationFn: settleCod,
+    mutationFn: (row: CodTransaction) => driver
+      ? remitCod({ shipmentId: row.shipmentId, amount: row.expectedAmount }) : settleCod(row.id),
     onMutate: () => setSuccessMessage(''),
     onSuccess: async (transaction) => {
-      setSuccessMessage(`Đã quyết toán COD cho vận đơn ${transaction.shipment.trackingCode}.`);
-      await client.invalidateQueries({ queryKey: ['cod-dashboard'] });
+      const trackingCode = query.data?.items.find((row) => row.id === transaction.id)?.shipment.trackingCode;
+      const action = driver ? 'Đã bàn giao COD' : 'Đã quyết toán COD';
+      setSuccessMessage(trackingCode ? `${action} cho vận đơn ${trackingCode}.` : `${action}.`);
+      setSelected(null);
+      await Promise.all(['cod-dashboard', 'customer-dashboard', 'admin-dashboard', 'shipment'].map(
+        (key) => client.invalidateQueries({ queryKey: [key] }),
+      ));
     },
   });
 
@@ -61,7 +69,7 @@ export function CodDashboardPage() {
     {
       align: 'right',
       id: 'remitted',
-      header: 'Đã nộp',
+      header: 'Đã bàn giao',
       render: (row) => (
         <span className="tabular-nums">
           {row.remittedAmount === null ? '—' : vndFormatter.format(row.remittedAmount)}
@@ -78,16 +86,16 @@ export function CodDashboardPage() {
       id: 'actions',
       header: 'Thao tác',
       render: (row) => {
-        if (row.status !== 'REMITTED') return <span className="text-muted-foreground">—</span>;
-        const isSettling = settle.isPending && settle.variables === row.id;
+        if (row.status !== (driver ? 'COLLECTED' : 'REMITTED')) return <span className="text-muted-foreground">—</span>;
+        const isSettling = settle.isPending && settle.variables?.id === row.id;
         return (
           <Button
-            className="w-full md:w-auto"
+            className="min-h-12 w-full md:w-auto"
             disabled={settle.isPending && !isSettling}
             loading={isSettling}
-            onClick={() => settle.mutate(row.id)}
+            onClick={() => { settle.reset(); setSelected(row); }}
           >
-            Quyết toán
+            {driver ? 'Bàn giao COD' : 'Quyết toán'}
           </Button>
         );
       },
@@ -98,9 +106,9 @@ export function CodDashboardPage() {
     <AccountLayout>
       <div className="mx-auto max-w-6xl">
         <PageHeader
-          description="Chỉ quyết toán khi số tiền thu và số tiền tài xế nộp khớp hoàn toàn với COD của vận đơn."
-          eyebrow="Quản trị · Tài chính vận hành"
-          title="Đối soát COD"
+          description={driver ? 'Bàn giao riêng tiền COD hàng hóa bạn đã thu. Phí vận chuyển được quản lý ở mục Bàn giao phí.' : 'Chỉ quyết toán khi số tiền thu và số tiền tài xế bàn giao khớp hoàn toàn với COD. Quyết toán không xác nhận đã chuyển tiền cho khách.'}
+          eyebrow={driver ? 'Tài xế · COD' : 'Quản trị · Tài chính vận hành'}
+          title={driver ? 'Bàn giao COD' : 'Đối soát COD'}
         />
 
         {successMessage ? (
@@ -146,7 +154,7 @@ export function CodDashboardPage() {
               Giao dịch COD
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Trạng thái và màu sắc dùng đúng mapping COD canonical của hệ thống.
+              Đã thu → Đã bàn giao → Đã quyết toán.
             </p>
           </div>
           <DataTable
@@ -160,6 +168,12 @@ export function CodDashboardPage() {
             rows={rows}
           />
         </section>
+        <ConfirmDialog open={selected !== null} title={driver ? 'Xác nhận bàn giao COD' : 'Xác nhận quyết toán COD'}
+          description={selected ? `${selected.shipment.trackingCode}: ${vndFormatter.format(selected.expectedAmount)} tiền COD hàng hóa.${driver ? ' Chỉ xác nhận khi đã bàn giao đủ khoản tiền này.' : ' Xác nhận hoàn tất đối soát khoản tiền này.'}` : ''}
+          confirmLabel={driver ? 'Xác nhận bàn giao' : 'Xác nhận quyết toán'} loading={settle.isPending}
+          error={settle.isError ? getApiErrorMessage(settle.error) : undefined}
+          onCancel={() => { if (!settle.isPending) setSelected(null); }}
+          onConfirm={() => { if (selected) settle.mutate(selected); }} />
       </div>
     </AccountLayout>
   );

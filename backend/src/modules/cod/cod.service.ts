@@ -91,9 +91,20 @@ export class CodService {
     });
   }
 
-  async dashboard() {
+  async mine(actor: AuthenticatedUser) {
+    const driver = await this.prisma.driverProfile.findUnique({ where: { userId: actor.id } });
+    if (!driver)
+      throw new NotFoundException({
+        code: 'DRIVER_PROFILE_NOT_FOUND',
+        message: 'Driver profile was not found',
+      });
+    return this.dashboard({ collectedByDriverId: driver.id });
+  }
+
+  async dashboard(where: Prisma.CODTransactionWhereInput = {}) {
     const [items, grouped] = await Promise.all([
       this.prisma.cODTransaction.findMany({
+        where,
         include: {
           shipment: { select: { trackingCode: true } },
           collectedByDriver: { include: { user: { select: { fullName: true } } } },
@@ -102,6 +113,7 @@ export class CodService {
         take: 100,
       }),
       this.prisma.cODTransaction.groupBy({
+        where,
         by: ['status'],
         _sum: { expectedAmount: true },
         _count: { _all: true },

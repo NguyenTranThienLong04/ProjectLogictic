@@ -226,6 +226,10 @@ PENDING → COLLECTED → REMITTED → SETTLED
 ```
 Exception: `DISPUTED`. Duplicate delivery request không được duplicate COD collection. Không mark `SETTLED` nếu amount mismatch.
 
+- Hiện tại `completeDelivery` tạo transaction trực tiếp ở `COLLECTED` trong cùng transaction nghiệp vụ khi `codAmount > 0`; trước đó chưa có ledger row (UI hiển thị “Chưa thu COD”). Driver xem khoản do chính mình thu qua `GET /cod/mine` và bàn giao qua command remit có kiểm tra ownership; Admin quyết toán từ `REMITTED`.
+- Customer dashboard cộng `expectedAmount` của mọi COD transaction chưa `SETTLED`, gồm cả `DISPUTED`; remit chưa làm giảm tổng này, settle mới giảm. Chi tiết đơn đọc COD status từ PostgreSQL ngay cả khi phần shipment được cache. Customer dashboard/detail tự refetch mỗi 30 giây khi đang mở.
+- `SETTLED` = **đã quyết toán**, không phải bằng chứng đã chuyển tiền cho Customer. Chưa có payout Customer trong flow này. COD luôn tách ledger/số tiền/trạng thái với Shipping Fee.
+
 ## SHIPPING FEE RESPONSIBILITY, PAYMENT, COLLECTION & RECONCILIATION (Phase E + H1 + H2 + H3)
 
 - `Shipment.shippingFeePayer` là historical snapshot bắt buộc khi Customer tạo vận đơn: `SENDER` = **Người gửi trả phí**, `RECEIVER` = **Người nhận trả phí**. Backend validate enum; frontend không được suy đoán payer.
