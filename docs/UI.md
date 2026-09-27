@@ -115,7 +115,7 @@ Tên enum giống nhau không bắt buộc cùng một shade nếu mức độ �
 | `PENDING` | Chờ thu COD | `bg-orange-50` | `text-orange-800` | `border-orange-200` | `bg-orange-400` |
 | `COLLECTED` | Đã thu COD | `bg-orange-100` | `text-orange-900` | `border-orange-300` | `bg-orange-500` |
 | `REMITTED` | Đã bàn giao COD | `bg-orange-200` | `text-orange-950` | `border-orange-400` | `bg-orange-600` |
-| `SETTLED` | Đã quyết toán COD | `bg-emerald-100` | `text-emerald-900` | `border-emerald-300` | `bg-emerald-600` |
+| `SETTLED` | Đã đối soát nội bộ | `bg-emerald-100` | `text-emerald-900` | `border-emerald-300` | `bg-emerald-600` |
 | `DISPUTED` | COD đang tranh chấp | `bg-red-600` | `text-white` | `border-red-700` | `bg-white` |
 
 #### Shipping fee status
@@ -154,10 +154,21 @@ Tên enum giống nhau không bắt buộc cùng một shade nếu mức độ �
 | Role | Screens |
 |---|---|
 | Customer | Login/Register, Dashboard, Create Shipment, Shipping Quote, My Shipments, Shipment Detail, Tracking, Saved Addresses, Notifications, Profile |
-| Driver | Dashboard, Assignments, Pickup Detail, Delivery Detail, Map, Proof Of Delivery, Failed Delivery, Delivery History, Shipping Fee Remittance, Profile |
+| Driver | Dashboard, Assignments, Pickup Detail, Delivery Detail, Map, Proof Of Delivery, Failed Delivery, Delivery History, Shipping Fee Remittance, COD Handover, Profile |
 | Warehouse | Dashboard, Inbound, Scan Shipment, Check-in, Sorting, Outbound, Transfers, Inbound Line-haul Trips, Exceptions |
 | Dispatcher | Dashboard, Shipments, Pickup Assignment, Delivery Assignment, Driver Availability, Driver Map, Line-haul Trips, Failed Deliveries, Returns, Exceptions |
 | Admin | Dashboard, Shipments, Users, Drivers + Capabilities, Line-haul Vehicles/Trips, Warehouses, Pricing, Shipping Fee Reconciliation, COD, Audit Logs, Analytics |
+
+### COD handover & manual payout (2026-09-27)
+
+- Driver `/driver/cod`: `Bàn giao COD [amount]` mở modal có số tiền, ghi chú tùy chọn và `Gửi yêu cầu bàn giao`. Sau success/refetch hiển thị **Đang chờ công ty xác nhận đã nhận tiền**, COD vẫn COLLECTED. Lịch sử giữ nguyên yêu cầu bị từ chối/lý do; chỉ gửi lại với yêu cầu mới khi không còn PENDING.
+- Admin `/admin/cod`: cùng bảng COD, Customer, tài xế, lịch sử bàn giao, trạng thái chi trả và mã chứng từ. PENDING handover có **Xác nhận đã nhận đủ** / **Từ chối bàn giao** (lý do bắt buộc); modal nêu rõ tài xế/số tiền và yêu cầu kiểm tiền thực tế. REMITTED có **Hoàn tất đối soát nội bộ**. SETTLED có **Tạo khoản chi trả**, chọn BANK_TRANSFER/CASH và mã chuyển khoản/biên nhận bắt buộc; tạo PENDING rồi dùng **Ghi nhận đã gửi tiền** sau khi thực gửi. Admin không có nút xác nhận thay Customer.
+- Customer Shipment Detail dùng `CustomerCodPanel` đọc ownership-scoped live API, hiển thị timeline thu → yêu cầu bàn giao → công ty xác nhận → đối soát → ghi nhận gửi tiền → khách xác nhận. History cũ không có dual-confirmation được ghi nhãn dữ liệu lịch sử. Không lộ internal note, Driver/Admin IDs hoặc AuditLog.
+- SENT hiển thị **Đang chờ bạn xác nhận đã nhận tiền** + số tiền/method/reference; **Tôi đã nhận đủ tiền** mở modal xác nhận, **Tôi chưa nhận / Có vấn đề** yêu cầu mô tả. DISPUTED luôn hiện vấn đề, không hiển thị đã nhận và vẫn nằm trong COD chờ chi trả. Chưa có luồng resolve trong MVP.
+- Dashboard Customer phân biệt **COD đã thu / COD chưa đối soát / COD chờ chi trả / COD đã chi trả** theo công thức backend ở DOMAIN. SETTLED chỉ mang nhãn **Đã đối soát nội bộ**. Các khoản Shipping Fee giữ surface riêng.
+- Dùng shared Modal/FormField/Select/Button/DataTable và badge config chung. Mọi trạng thái có nhãn chữ + dot. Remittance PENDING và payout SENT: orange-100/900/300, dot orange-500; CONFIRMED/PAID_OUT: emerald-100/900/300, dot emerald-600; REJECTED/DISPUTED: red-50/900/300, dot red-600; payout PENDING: orange-50/800/200, dot orange-400.
+- Bảng dùng cards dưới desktop, scroll nội bộ trên desktop; Driver controls >=48px. Form có label, validate bắt buộc, loading/disabled, lỗi trong modal và retry. Mutation chỉ thông báo thành công sau API success; không optimistic tài chính. Query refetch 30s, sau mutation và khi reload; có nút Tải lại. Bảng hiện tối đa 100 giao dịch gần nhất, summary toàn phạm vi như contract cũ.
+- Chứng từ MVP là reference thủ công; không có upload giả hoặc input URL. Quy tắc business/authorization/concurrency nằm ở backend, không dùng UI visibility làm phân quyền.
 
 ### Shipping fee collection UI (Phase H1)
 
@@ -241,6 +252,6 @@ Tên enum giống nhau không bắt buộc cùng một shade nếu mức độ �
 ```
 Total Shipments · Pending · In Transit · Out For Delivery · Delivered
 Failed · Cancelled · Delivery Success Rate · Average Delivery Time
-COD Collected · COD Unsettled
+COD Collected · COD Unsettled · COD Awaiting Payout · COD Paid Out (Customer)
 ```
 Tính bằng PostgreSQL aggregate query (không load hết data về Node). Chart dùng Recharts.

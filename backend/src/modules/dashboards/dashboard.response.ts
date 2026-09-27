@@ -12,6 +12,8 @@ export interface DashboardOverview {
   averageDeliveryTimeHours: number;
   codCollected: number;
   codUnsettled: number;
+  codAwaitingPayout: number;
+  codPaidOut: number;
 }
 
 export interface DashboardShipmentSummary {

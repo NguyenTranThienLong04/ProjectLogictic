@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ShipmentStatusBadge } from '../../components/shipment-status-badge';
 import { ShipmentTimeline } from '../../components/shipment-timeline';
 import { Button } from '../../components/ui/button';
-import { CodStatusBadge } from '../../components/ui/status-badge';
+import { CustomerCodPanel } from '../cod/customer-cod-panel';
 import { EmptyState } from '../../components/ui/empty-state';
 import { ErrorSummary } from '../../components/ui/error-summary';
 import { ErrorState } from '../../components/ui/error-state';
@@ -79,6 +79,7 @@ export function ShipmentDetailPage() {
                   <h2 className="text-lg font-semibold text-ink sm:text-xl">Hành trình</h2>
                   <div className="mt-6"><ShipmentTimeline events={shipmentQuery.data.timeline} /></div>
                 </section>
+                <CustomerCodPanel shipmentId={id} amount={shipmentQuery.data.codAmount} />
                 <section className="grid gap-4 md:grid-cols-2">
                   <AddressCard title="Địa chỉ lấy hàng" address={shipmentQuery.data.pickup} />
                   <AddressCard title="Địa chỉ giao hàng" address={shipmentQuery.data.delivery} />
@@ -101,23 +102,6 @@ export function ShipmentDetailPage() {
                   expectedAmount={shipmentQuery.data.shippingFee.expectedAmount}
                   shipmentId={shipmentQuery.data.id}
                 />
-                <section className="rounded-surface border border-orange-200 bg-orange-50 p-5">
-                  <h2 className="font-semibold text-ink">COD</h2>
-                  <div className="mt-3">
-                    {shipmentQuery.data.codStatus ? <CodStatusBadge status={shipmentQuery.data.codStatus} />
-                      : <p className="text-sm text-muted-foreground">{shipmentQuery.data.codAmount > 0 ? 'Chưa thu COD' : 'Không thu COD'}</p>}
-                  </div>
-                  <dl className="mt-4">
-                    <Detail
-                      label="Tiền thu hộ hàng hóa"
-                      value={vndFormatter.format(shipmentQuery.data.codAmount)}
-                    />
-                  </dl>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    COD là khoản thu hộ hàng hóa, tách biệt với phí vận chuyển.
-                    {' '}Đã quyết toán là hoàn tất đối soát COD, không xác nhận đã chuyển tiền cho khách.
-                  </p>
-                </section>
                 {shipmentQuery.data.status === 'OUT_FOR_DELIVERY' ? (
                   <section className="overflow-hidden rounded-surface border border-border bg-surface p-4 shadow-surface">
                     <h2 className="font-semibold text-ink">Tài xế đang giao hàng</h2>

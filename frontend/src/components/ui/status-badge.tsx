@@ -1,6 +1,8 @@
 import type { HTMLAttributes } from 'react';
 import {
   codStatusBadgeConfig,
+  codRemittanceStatusBadgeConfig,
+  codPayoutStatusBadgeConfig,
   deliveryFailureReasonBadgeConfig,
   shipmentStatusBadgeConfig,
   lineHaulTripStatusBadgeConfig,
@@ -39,16 +41,35 @@ export function ShipmentStatusBadge({ status }: { status: ShipmentBadgeStatus })
   return <StatusBadge appearance={shipmentStatusBadgeConfig[status]} />;
 }
 
-export function WarehouseTransferStatusBadge({
-  status,
-}: {
-  status: WarehouseTransferBadgeStatus;
-}) {
+export function WarehouseTransferStatusBadge({ status }: { status: WarehouseTransferBadgeStatus }) {
   return <StatusBadge appearance={warehouseTransferStatusBadgeConfig[status]} />;
 }
 
 export function CodStatusBadge({ status }: { status: CodBadgeStatus }) {
   return <StatusBadge appearance={codStatusBadgeConfig[status]} />;
+}
+
+export function CodRemittanceStatusBadge({
+  status,
+}: {
+  status: keyof typeof codRemittanceStatusBadgeConfig;
+}) {
+  return (
+    <StatusBadge
+      appearance={codRemittanceStatusBadgeConfig[status]}
+      className="whitespace-normal"
+    />
+  );
+}
+
+export function CodPayoutStatusBadge({
+  status,
+}: {
+  status: keyof typeof codPayoutStatusBadgeConfig;
+}) {
+  return (
+    <StatusBadge appearance={codPayoutStatusBadgeConfig[status]} className="whitespace-normal" />
+  );
 }
 
 export function ShippingFeeStatusBadge({ status }: { status: ShippingFeeBadgeStatus }) {
@@ -63,11 +84,7 @@ export function DeliveryFailureReasonBadge({
   return <StatusBadge appearance={deliveryFailureReasonBadgeConfig[reason]} />;
 }
 
-export function LineHaulVehicleStatusBadge({
-  status,
-}: {
-  status: LineHaulVehicleBadgeStatus;
-}) {
+export function LineHaulVehicleStatusBadge({ status }: { status: LineHaulVehicleBadgeStatus }) {
   return <StatusBadge appearance={lineHaulVehicleStatusBadgeConfig[status]} />;
 }
 

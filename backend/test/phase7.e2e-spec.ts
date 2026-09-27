@@ -56,7 +56,9 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
   const driverEmail = `driver-p7-${runId}@example.com`;
   const adminEmail = `admin-p7-${runId}@example.com`;
   const customerEmail = `customer-p7-${runId}@example.com`;
-  const emails = [driverEmail, adminEmail, customerEmail];
+  const otherDriverEmail = `other-driver-p7-${runId}@example.com`;
+  const otherCustomerEmail = `other-customer-p7-${runId}@example.com`;
+  const emails = [driverEmail, adminEmail, customerEmail, otherDriverEmail, otherCustomerEmail];
   const shipmentIds: string[] = [];
   let driverToken = '';
   let adminToken = '';
@@ -64,6 +66,10 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
   let driverProfileId = '';
   let adminId = '';
   let customerId = '';
+  let otherDriverToken = '';
+  let otherCustomerToken = '';
+  const post = (path: string, token: string, body: object = {}) =>
+    request(server).post(`/api/v1/cod/${path}`).set('Authorization', `Bearer ${token}`).send(body);
 
   const createShipment = async (suffix: string, codAmount: number, status: ShipmentStatus) => {
     const shipment = await prisma.shipment.create({
@@ -156,6 +162,32 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
     driverToken = await login(driverEmail);
     adminToken = await login(adminEmail);
     customerToken = await login(customerEmail);
+    const otherDriver = await prisma.user.create({
+      data: {
+        email: otherDriverEmail,
+        fullName: 'Other Driver',
+        passwordHash,
+        role: UserRole.DRIVER,
+      },
+    });
+    await prisma.driverProfile.create({
+      data: {
+        userId: otherDriver.id,
+        employeeCode: `OTHER-${runId.slice(0, 12)}`,
+        vehicleType: 'MOTORBIKE',
+        vehiclePlate: 'TEST',
+      },
+    });
+    await prisma.user.create({
+      data: {
+        email: otherCustomerEmail,
+        fullName: 'Other Customer',
+        passwordHash,
+        role: UserRole.CUSTOMER,
+      },
+    });
+    otherDriverToken = await login(otherDriverEmail);
+    otherCustomerToken = await login(otherCustomerEmail);
   });
 
   afterAll(async () => {
@@ -168,6 +200,12 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
     await prisma.shipmentProof.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
     await prisma.deliveryAttempt.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
     await prisma.driverAssignment.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
+    await prisma.cODPayout.deleteMany({
+      where: { codTransaction: { shipmentId: { in: shipmentIds } } },
+    });
+    await prisma.cODRemittance.deleteMany({
+      where: { codTransaction: { shipmentId: { in: shipmentIds } } },
+    });
     await prisma.cODTransaction.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
     await prisma.shippingFeeTransaction.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
     await prisma.trackingEvent.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
@@ -227,7 +265,14 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
       collectedAmount: 275_000,
     });
     const readOverview = async () =>
-      bodyFrom<{ overview: { codUnsettled: number } }>(
+      bodyFrom<{
+        overview: {
+          codCollected: number;
+          codUnsettled: number;
+          codAwaitingPayout: number;
+          codPaidOut: number;
+        };
+      }>(
         await request(server)
           .get('/api/v1/dashboards/customer')
           .set('Authorization', `Bearer ${customerToken}`)
@@ -257,11 +302,51 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
       .post(`/api/v1/cod/${cod.id}/settle`)
       .set('Authorization', `Bearer ${driverToken}`)
       .expect(403);
-    await request(server)
-      .post(`/api/v1/cod/shipments/${shipment.id}/remit`)
-      .set('Authorization', `Bearer ${driverToken}`)
-      .send({ amount: 275_000 })
-      .expect(200);
+    const remitBody = {
+      amount: 275_000,
+      clientRequestId: randomUUID(),
+      note: 'Internal handover note',
+    };
+    await post(`shipments/${shipment.id}/remit`, otherDriverToken, remitBody).expect(404);
+    await post(`shipments/${shipment.id}/remit`, driverToken, {
+      ...remitBody,
+      amount: 274_000,
+    }).expect(409);
+    await post(`${cod.id}/payout`, adminToken, {
+      amount: 275_000,
+      method: 'BANK_TRANSFER',
+      reference: 'BANK-001',
+    }).expect(409);
+    const handover = bodyFrom<{ id: string; status: string }>(
+      await post(`shipments/${shipment.id}/remit`, driverToken, remitBody).expect(200),
+    ).data;
+    expect(handover.status).toBe('PENDING');
+    expect((await readDetail()).codStatus).toBe('COLLECTED');
+    expect((await readOverview()).codAwaitingPayout).toBe(0);
+    await post(`remittances/${handover.id}/confirm`, driverToken, { expectedVersion: 0 }).expect(
+      403,
+    );
+    await post(`${cod.id}/settle`, adminToken).expect(409);
+    await post(`shipments/${shipment.id}/remit`, driverToken, {
+      ...remitBody,
+      clientRequestId: randomUUID(),
+    }).expect(409);
+    expect(
+      bodyFrom<{ id: string }>(
+        await post(`shipments/${shipment.id}/remit`, driverToken, remitBody).expect(200),
+      ).data.id,
+    ).toBe(handover.id);
+    const confirms = await Promise.all(
+      [0, 1].map(() =>
+        post(`remittances/${handover.id}/confirm`, adminToken, { expectedVersion: 0 }),
+      ),
+    );
+    expect(confirms.map((r) => r.status)).toEqual([200, 200]);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: handover.id, action: 'COD_HANDOVER_CONFIRMED' },
+      }),
+    ).toBe(1);
     expect((await readOverview()).codUnsettled).toBe(275_000);
     expect((await readDetail()).codStatus).toBe('REMITTED');
     await request(server)
@@ -270,6 +355,83 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
       .expect(200);
     expect((await readOverview()).codUnsettled).toBe(0);
     expect((await readDetail()).codStatus).toBe('SETTLED');
+    expect(await readOverview()).toMatchObject({
+      codCollected: 275_000,
+      codUnsettled: 0,
+      codAwaitingPayout: 275_000,
+      codPaidOut: 0,
+    });
+    const payoutBody = {
+      amount: 275_000,
+      method: 'BANK_TRANSFER',
+      reference: 'BANK-001',
+      note: 'Internal payout note',
+    };
+    await post(`${cod.id}/payout`, adminToken, { ...payoutBody, amount: 274_999 }).expect(409);
+    await post(`${cod.id}/payout`, adminToken, { ...payoutBody, reference: ' ' }).expect(409);
+    const created = await Promise.all(
+      [0, 1].map(() => post(`${cod.id}/payout`, adminToken, payoutBody)),
+    );
+    expect(created.map((r) => r.status)).toEqual([200, 200]);
+    const payout = bodyFrom<{ id: string }>(created[0]).data;
+    expect(bodyFrom<{ id: string }>(created[1]).data.id).toBe(payout.id);
+    await post(`${cod.id}/payout`, adminToken, { ...payoutBody, reference: 'different' }).expect(
+      409,
+    );
+    await post(`payouts/${payout.id}/confirm`, customerToken, { expectedVersion: 0 }).expect(409);
+    await post(`payouts/${payout.id}/send`, driverToken, {
+      expectedVersion: 0,
+      reference: 'BANK-001',
+    }).expect(403);
+    await post(`payouts/${payout.id}/send`, adminToken, {
+      expectedVersion: 1,
+      reference: 'BANK-001',
+    }).expect(409);
+    await post(`payouts/${payout.id}/send`, adminToken, {
+      expectedVersion: 0,
+      reference: 'BANK-001',
+    }).expect(200);
+    await post(`payouts/${payout.id}/confirm`, adminToken, { expectedVersion: 1 }).expect(403);
+    await post(`payouts/${payout.id}/confirm`, otherCustomerToken, { expectedVersion: 1 }).expect(
+      404,
+    );
+    await request(server)
+      .get(`/api/v1/cod/shipments/${shipment.id}`)
+      .set('Authorization', `Bearer ${otherCustomerToken}`)
+      .expect(404);
+    const safeRead = await request(server)
+      .get(`/api/v1/cod/shipments/${shipment.id}`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .expect(200);
+    expect(bodyFrom<{ payout: { status: string } }>(safeRead).data.payout.status).toBe('SENT');
+    expect(JSON.stringify(safeRead.body)).not.toMatch(/Internal|AdminId|DriverId|customerId/);
+    const acknowledgments = await Promise.all(
+      [0, 1].map(() => post(`payouts/${payout.id}/confirm`, customerToken, { expectedVersion: 1 })),
+    );
+    expect(acknowledgments.map((r) => r.status)).toEqual([200, 200]);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: payout.id, action: 'COD_PAYOUT_RECEIVED' },
+      }),
+    ).toBe(1);
+    expect(await prisma.cODPayout.count({ where: { codTransactionId: cod.id } })).toBe(1);
+    expect(await readOverview()).toMatchObject({
+      codCollected: 275_000,
+      codUnsettled: 0,
+      codAwaitingPayout: 0,
+      codPaidOut: 275_000,
+    });
+    await post(`${cod.id}/payout`, adminToken, payoutBody).expect(200);
+    await post(`payouts/${payout.id}/send`, adminToken, {
+      expectedVersion: 0,
+      reference: 'BANK-001',
+    }).expect(200);
+    await post(`shipments/${shipment.id}/remit`, driverToken, remitBody).expect(200);
+    const reload = await request(server)
+      .get(`/api/v1/cod/shipments/${shipment.id}`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .expect(200);
+    expect(bodyFrom<{ payout: { status: string } }>(reload).data.payout.status).toBe('PAID_OUT');
     expect(
       await prisma.shippingFeeTransaction.findUnique({ where: { shipmentId: shipment.id } }),
     ).toMatchObject({ status: 'COLLECTED', expectedAmount: 30_000, collectedAmount: 30_000 });
@@ -322,19 +484,27 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
       },
     });
 
+    const requestId = randomUUID();
     const responses = await Promise.all([
       request(server)
         .post(`/api/v1/cod/shipments/${shipment.id}/remit`)
         .set('Authorization', `Bearer ${driverToken}`)
-        .send({ amount: 150_000 }),
+        .send({ amount: 150_000, clientRequestId: requestId }),
       request(server)
         .post(`/api/v1/cod/shipments/${shipment.id}/remit`)
         .set('Authorization', `Bearer ${driverToken}`)
-        .send({ amount: 150_000 }),
+        .send({ amount: 150_000, clientRequestId: requestId }),
     ]);
 
-    expect(responses.map(({ status }) => status)).toContain(200);
-    expect(responses.every(({ status }) => status === 200 || status === 409)).toBe(true);
+    expect(responses.map(({ status }) => status)).toEqual([200, 200]);
+    const remittanceId = bodyFrom<{ id: string }>(responses[0]).data.id;
+    expect(await prisma.cODTransaction.findUnique({ where: { id: cod.id } })).toMatchObject({
+      status: 'COLLECTED',
+      remittedAmount: null,
+    });
+    await post(`remittances/${remittanceId}/confirm`, adminToken, { expectedVersion: 0 }).expect(
+      200,
+    );
     await expect(
       prisma.cODTransaction.findUniqueOrThrow({ where: { id: cod.id } }),
     ).resolves.toMatchObject({
@@ -408,5 +578,218 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
         where: { action: 'COD_SETTLED', entityType: 'CODTransaction', entityId: mismatch.id },
       }),
     ).toBe(0);
+  });
+
+  it('preserves rejected handovers, validates command input and keeps disputed payouts unpaid', async () => {
+    const shipment = await createShipment('REJECT', 500_000, ShipmentStatus.DELIVERED);
+    const feeBefore = await prisma.shippingFeeTransaction.findUnique({
+      where: { shipmentId: shipment.id },
+    });
+    const cod = await prisma.cODTransaction.create({
+      data: {
+        shipmentId: shipment.id,
+        expectedAmount: 500_000,
+        collectedAmount: 500_000,
+        collectedByDriverId: driverProfileId,
+        collectedAt: new Date(),
+        status: 'COLLECTED',
+      },
+    });
+    const body = { amount: 500_000, clientRequestId: randomUUID() };
+    for (const amount of [0, -1, 0.5, 2147483648])
+      await post(`shipments/${shipment.id}/remit`, driverToken, { ...body, amount }).expect(400);
+    await post(`shipments/${shipment.id}/remit`, driverToken, {
+      ...body,
+      status: 'REMITTED',
+    }).expect(400);
+    const pending = bodyFrom<{ id: string }>(
+      await post(`shipments/${shipment.id}/remit`, driverToken, body).expect(200),
+    ).data;
+    await post(`remittances/${pending.id}/reject`, adminToken, {
+      expectedVersion: 0,
+      reason: ' ',
+    }).expect(400);
+    await post(`remittances/${pending.id}/confirm`, adminToken, { expectedVersion: 99 }).expect(
+      409,
+    );
+    for (let i = 0; i < 2; i++)
+      await post(`remittances/${pending.id}/reject`, adminToken, {
+        expectedVersion: 0,
+        reason: 'Chưa nhận tiền thực tế',
+      }).expect(200);
+    expect(await prisma.cODTransaction.findUnique({ where: { id: cod.id } })).toMatchObject({
+      status: 'COLLECTED',
+      remittedAt: null,
+    });
+    await post(`remittances/${pending.id}/confirm`, adminToken, { expectedVersion: 1 }).expect(409);
+    expect(
+      bodyFrom<{ status: string }>(
+        await post(`shipments/${shipment.id}/remit`, driverToken, body).expect(200),
+      ).data.status,
+    ).toBe('REJECTED');
+    const retry = bodyFrom<{ id: string }>(
+      await post(`shipments/${shipment.id}/remit`, driverToken, {
+        ...body,
+        clientRequestId: randomUUID(),
+      }).expect(200),
+    ).data;
+    expect(retry.id).not.toBe(pending.id);
+    // The partial index protects the invariant even if another writer bypasses the service.
+    await expect(
+      prisma.cODRemittance.create({
+        data: {
+          codTransactionId: cod.id,
+          submittedByDriverId: driverProfileId,
+          amount: 500_000,
+          clientRequestId: randomUUID(),
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'P2002' });
+    await post(`remittances/${retry.id}/confirm`, adminToken, { expectedVersion: 0 }).expect(200);
+    await post(`${cod.id}/settle`, adminToken).expect(200);
+    const payout = bodyFrom<{ id: string }>(
+      await post(`${cod.id}/payout`, adminToken, {
+        amount: 500_000,
+        method: 'CASH',
+        reference: 'RECEIPT-002',
+      }).expect(200),
+    ).data;
+    await expect(
+      prisma.cODPayout.create({
+        data: {
+          codTransactionId: cod.id,
+          customerId,
+          amount: 500_000,
+          method: 'CASH',
+          reference: 'DUPLICATE',
+          createdByAdminId: adminId,
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'P2002' });
+    await post(`payouts/${payout.id}/dispute`, customerToken, {
+      expectedVersion: 0,
+      reason: 'Not yet',
+    }).expect(409);
+    await post(`payouts/${payout.id}/send`, adminToken, {
+      expectedVersion: 0,
+      reference: 'WRONG',
+    }).expect(409);
+    await post(`payouts/${payout.id}/send`, adminToken, {
+      expectedVersion: 0,
+      reference: 'RECEIPT-002',
+    }).expect(200);
+    await post(`payouts/${payout.id}/dispute`, otherCustomerToken, {
+      expectedVersion: 1,
+      reason: 'Not mine',
+    }).expect(404);
+    for (let i = 0; i < 2; i++)
+      await post(`payouts/${payout.id}/dispute`, customerToken, {
+        expectedVersion: 1,
+        reason: 'Chưa nhận tiền',
+      }).expect(200);
+    await post(`payouts/${payout.id}/confirm`, customerToken, { expectedVersion: 2 }).expect(409);
+    expect(await prisma.cODPayout.findUnique({ where: { id: payout.id } })).toMatchObject({
+      status: 'DISPUTED',
+      customerConfirmedAt: null,
+    });
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: pending.id, action: 'COD_HANDOVER_REJECTED' },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: payout.id, action: 'COD_PAYOUT_DISPUTED' },
+      }),
+    ).toBe(1);
+    expect(await prisma.cODRemittance.count({ where: { codTransactionId: cod.id } })).toBe(2);
+    const overview = bodyFrom<{ overview: { codPaidOut: number; codAwaitingPayout: number } }>(
+      await request(server)
+        .get('/api/v1/dashboards/customer')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .expect(200),
+    ).data.overview;
+    expect(overview.codPaidOut).toBe(275_000);
+    expect(overview.codAwaitingPayout).toBe(725_000); // prior legacy settlement + this disputed payout
+    expect(
+      await prisma.shippingFeeTransaction.findUnique({ where: { shipmentId: shipment.id } }),
+    ).toEqual(feeBefore);
+  });
+
+  it('commits only one outcome when confirmation races against rejection or a customer dispute', async () => {
+    const shipment = await createShipment('RACE', 125_000, ShipmentStatus.DELIVERED);
+    const cod = await prisma.cODTransaction.create({
+      data: {
+        shipmentId: shipment.id,
+        expectedAmount: 125_000,
+        collectedAmount: 125_000,
+        collectedByDriverId: driverProfileId,
+        collectedAt: new Date(),
+        status: 'COLLECTED',
+      },
+    });
+    const submit = async () =>
+      bodyFrom<{ id: string }>(
+        await post(`shipments/${shipment.id}/remit`, driverToken, {
+          amount: 125_000,
+          clientRequestId: randomUUID(),
+        }).expect(200),
+      ).data;
+    const handover = await submit();
+    const reviewed = await Promise.all([
+      post(`remittances/${handover.id}/confirm`, adminToken, { expectedVersion: 0 }),
+      post(`remittances/${handover.id}/reject`, adminToken, {
+        expectedVersion: 0,
+        reason: 'Kiểm tra lại',
+      }),
+    ]);
+    expect(reviewed.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          entityId: handover.id,
+          action: { in: ['COD_HANDOVER_CONFIRMED', 'COD_HANDOVER_REJECTED'] },
+        },
+      }),
+    ).toBe(1);
+    const current = await prisma.cODTransaction.findUniqueOrThrow({ where: { id: cod.id } });
+    if (current.status === 'COLLECTED') {
+      const next = await submit();
+      await post(`remittances/${next.id}/confirm`, adminToken, { expectedVersion: 0 }).expect(200);
+    }
+    await post(`${cod.id}/settle`, adminToken).expect(200);
+    const payout = bodyFrom<{ id: string }>(
+      await post(`${cod.id}/payout`, adminToken, {
+        amount: 125_000,
+        method: 'BANK_TRANSFER',
+        reference: 'RACE-REF',
+      }).expect(200),
+    ).data;
+    await post(`payouts/${payout.id}/send`, adminToken, {
+      expectedVersion: 0,
+      reference: 'RACE-REF',
+    }).expect(200);
+    const received = await Promise.all([
+      post(`payouts/${payout.id}/confirm`, customerToken, { expectedVersion: 1 }),
+      post(`payouts/${payout.id}/dispute`, customerToken, {
+        expectedVersion: 1,
+        reason: 'Chưa nhận',
+      }),
+    ]);
+    expect(received.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          entityId: payout.id,
+          action: { in: ['COD_PAYOUT_RECEIVED', 'COD_PAYOUT_DISPUTED'] },
+        },
+      }),
+    ).toBe(1);
+    const final = await prisma.cODPayout.findUniqueOrThrow({ where: { id: payout.id } });
+    expect(final.version).toBe(2);
+    expect(Boolean(final.customerConfirmedAt)).not.toBe(Boolean(final.disputedAt));
+    expect(await prisma.cODTransaction.findUnique({ where: { id: cod.id } })).toMatchObject({
+      status: 'SETTLED',
+    });
   });
 });

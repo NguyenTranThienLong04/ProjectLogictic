@@ -25,6 +25,8 @@ interface OverviewRow {
 interface CodRow {
   codCollected: number;
   codUnsettled: number;
+  codAwaitingPayout: number;
+  codPaidOut: number;
 }
 
 interface AssignmentCountsRow {
@@ -207,13 +209,21 @@ export class DashboardsService {
         WITH scoped_shipments AS (${scope})
         SELECT
           COALESCE(SUM(cod."collectedAmount"), 0)::double precision AS "codCollected",
-          COALESCE(SUM(cod."expectedAmount") FILTER (WHERE cod.status <> 'SETTLED'), 0)::double precision AS "codUnsettled"
+          COALESCE(SUM(cod."expectedAmount") FILTER (WHERE cod.status <> 'SETTLED'), 0)::double precision AS "codUnsettled",
+          COALESCE(SUM(cod."expectedAmount") FILTER (WHERE cod.status = 'SETTLED' AND payout.status IS DISTINCT FROM 'PAID_OUT'), 0)::double precision AS "codAwaitingPayout",
+          COALESCE(SUM(payout.amount) FILTER (WHERE payout.status = 'PAID_OUT'), 0)::double precision AS "codPaidOut"
         FROM "CODTransaction" cod
         JOIN scoped_shipments scoped ON scoped.id = cod."shipmentId"
+        LEFT JOIN "CODPayout" payout ON payout."codTransactionId" = cod.id
       `,
     ]);
     const overview = overviewRows[0] ?? this.emptyOverview();
-    const cod = codRows[0] ?? { codCollected: 0, codUnsettled: 0 };
+    const cod = codRows[0] ?? {
+      codCollected: 0,
+      codUnsettled: 0,
+      codAwaitingPayout: 0,
+      codPaidOut: 0,
+    };
     return { ...overview, ...cod } satisfies DashboardOverview;
   }
 

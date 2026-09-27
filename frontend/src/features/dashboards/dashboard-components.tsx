@@ -41,7 +41,12 @@ export function MetricCard({
   );
 }
 
-export function DashboardOverviewGrid({ overview }: { overview: DashboardOverview }) {
+export function DashboardOverviewGrid({
+  overview,
+}: {
+  overview: Omit<DashboardOverview, 'codAwaitingPayout' | 'codPaidOut'> &
+    Partial<Pick<DashboardOverview, 'codAwaitingPayout' | 'codPaidOut'>>;
+}) {
   const metrics = [
     ['Tổng vận đơn', integerFormatter.format(overview.totalShipments), 'primary'],
     ['Chờ xác nhận', integerFormatter.format(overview.pending), 'warning'],
@@ -50,10 +55,20 @@ export function DashboardOverviewGrid({ overview }: { overview: DashboardOvervie
     ['Đã giao', integerFormatter.format(overview.delivered), 'success'],
     ['Giao chưa thành công', integerFormatter.format(overview.failed), 'danger'],
     ['Đã hủy', integerFormatter.format(overview.cancelled), 'slate'],
-    ['Tỷ lệ giao thành công', `${percentFormatter.format(overview.deliverySuccessRate)}%`, 'success'],
+    [
+      'Tỷ lệ giao thành công',
+      `${percentFormatter.format(overview.deliverySuccessRate)}%`,
+      'success',
+    ],
     ['Thời gian giao trung bình', durationLabel(overview.averageDeliveryTimeHours), 'primary'],
     ['COD đã thu', vndFormatter.format(overview.codCollected), 'warning'],
-    ['COD chưa quyết toán', vndFormatter.format(overview.codUnsettled), 'warning'],
+    ['COD chưa đối soát', vndFormatter.format(overview.codUnsettled), 'warning'],
+    ...(overview.codAwaitingPayout === undefined
+      ? []
+      : [['COD chờ chi trả', vndFormatter.format(overview.codAwaitingPayout), 'warning'] as const]),
+    ...(overview.codPaidOut === undefined
+      ? []
+      : [['COD đã chi trả', vndFormatter.format(overview.codPaidOut), 'success'] as const]),
   ] as const;
   return (
     <section aria-labelledby="dashboard-overview-heading">

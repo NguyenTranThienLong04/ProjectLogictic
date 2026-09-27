@@ -42,7 +42,7 @@ export function CustomerDashboardPage() {
         ) : dashboard.data ? (
           <div className="mt-6">
             <DashboardOverviewGrid overview={dashboard.data.overview} />
-            <p className="mt-3 text-sm text-muted-foreground">COD chưa quyết toán: tiền đã thu nhưng chưa hoàn tất bàn giao/đối soát.</p>
+            <p className="mt-3 text-sm text-muted-foreground">COD chờ chi trả là khoản đã đối soát nhưng bạn chưa xác nhận nhận tiền, gồm cả khoản đang có vấn đề. COD đã chi trả chỉ tăng sau khi bạn xác nhận.</p>
             <RecentShipmentsTable rows={dashboard.data.recentShipments} />
           </div>
         ) : null}

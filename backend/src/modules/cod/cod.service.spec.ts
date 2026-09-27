@@ -37,7 +37,7 @@ describe('CodService concurrency guards', () => {
       );
     }
   });
-  it('remits with a conditional COLLECTED update and does not audit a lost race', async () => {
+  it('does not remit or audit when the conditional Admin review loses a race', async () => {
     const cod = {
       id: codId,
       shipmentId,
@@ -59,6 +59,14 @@ describe('CodService concurrency guards', () => {
       }) => Promise<{ count: number }>
     >(() => Promise.resolve({ count: 0 }));
     const tx = {
+      $queryRaw: jest.fn(() => Promise.resolve([])),
+      cODRemittance: {
+        findUnique: jest.fn(() => Promise.resolve({ codTransactionId: codId })),
+        findUniqueOrThrow: jest.fn(() =>
+          Promise.resolve({ id: 'remittance', status: 'PENDING', version: 0, amount: 150_000 }),
+        ),
+        updateMany: jest.fn(() => Promise.resolve({ count: 0 })),
+      },
       cODTransaction: {
         findUnique: jest.fn(() => Promise.resolve(cod)),
         updateMany,
@@ -73,16 +81,15 @@ describe('CodService concurrency guards', () => {
       $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
     } as unknown as PrismaService;
 
-    await expect(transaction(prisma).remit(driverActor, shipmentId, 150_000, {})).rejects.toThrow(
-      ConflictException,
+    await expect(
+      transaction(prisma).reviewRemittance(actor, 'remittance', { expectedVersion: 0 }, true, {}),
+    ).rejects.toThrow(ConflictException);
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(tx.cODRemittance.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'remittance', status: 'PENDING', version: 0 },
+      }),
     );
-    const update = updateMany.mock.calls[0]?.[0];
-    expect(update?.where).toEqual({ id: codId, status: CODTransactionStatus.COLLECTED });
-    expect(update?.data).toMatchObject({
-      remittedAmount: 150_000,
-      status: CODTransactionStatus.REMITTED,
-    });
-    expect(update?.data.remittedAt).toBeInstanceOf(Date);
     expect(tx.auditLog.create).not.toHaveBeenCalled();
   });
 
@@ -94,6 +101,7 @@ describe('CodService concurrency guards', () => {
       collectedAmount: 150_000,
       remittedAmount: 150_000,
       status: CODTransactionStatus.REMITTED,
+      version: 0,
     };
     const settled = { ...cod, status: CODTransactionStatus.SETTLED, settledAt: new Date() };
     const updateMany = jest.fn<
@@ -108,6 +116,7 @@ describe('CodService concurrency guards', () => {
       }) => Promise<{ count: number }>
     >(() => Promise.resolve({ count: 1 }));
     const tx = {
+      $queryRaw: jest.fn(() => Promise.resolve([])),
       cODTransaction: {
         findUnique: jest.fn(() => Promise.resolve(cod)),
         updateMany,
@@ -124,6 +133,7 @@ describe('CodService concurrency guards', () => {
     expect(update?.where).toEqual({
       id: codId,
       status: CODTransactionStatus.REMITTED,
+      version: 0,
       collectedAmount: 150_000,
       remittedAmount: 150_000,
     });
@@ -134,6 +144,7 @@ describe('CodService concurrency guards', () => {
 
   it('does not execute the settlement update when either amount mismatches', async () => {
     const tx = {
+      $queryRaw: jest.fn(() => Promise.resolve([])),
       cODTransaction: {
         findUnique: jest.fn(() =>
           Promise.resolve({

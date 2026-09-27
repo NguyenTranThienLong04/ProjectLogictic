@@ -147,7 +147,7 @@ export const codStatusBadgeConfig = {
     dot: 'bg-orange-600',
   },
   SETTLED: {
-    label: 'Đã quyết toán COD',
+    label: 'Đã đối soát nội bộ',
     surface: 'border-emerald-300 bg-emerald-100 text-emerald-900',
     dot: 'bg-emerald-600',
   },
@@ -155,6 +155,47 @@ export const codStatusBadgeConfig = {
     label: 'COD đang tranh chấp',
     surface: 'border-red-700 bg-red-600 text-white',
     dot: 'bg-white',
+  },
+} as const satisfies Record<string, StatusBadgeAppearance>;
+
+export const codRemittanceStatusBadgeConfig = {
+  PENDING: {
+    label: 'Chờ công ty xác nhận',
+    surface: 'border-orange-300 bg-orange-100 text-orange-900',
+    dot: 'bg-orange-500',
+  },
+  CONFIRMED: {
+    label: 'Công ty đã nhận đủ',
+    surface: 'border-emerald-300 bg-emerald-100 text-emerald-900',
+    dot: 'bg-emerald-600',
+  },
+  REJECTED: {
+    label: 'Bàn giao bị từ chối',
+    surface: 'border-red-300 bg-red-50 text-red-900',
+    dot: 'bg-red-600',
+  },
+} as const satisfies Record<string, StatusBadgeAppearance>;
+
+export const codPayoutStatusBadgeConfig = {
+  PENDING: {
+    label: 'Chờ gửi tiền',
+    surface: 'border-orange-200 bg-orange-50 text-orange-800',
+    dot: 'bg-orange-400',
+  },
+  SENT: {
+    label: 'Chờ khách xác nhận',
+    surface: 'border-orange-300 bg-orange-100 text-orange-900',
+    dot: 'bg-orange-500',
+  },
+  PAID_OUT: {
+    label: 'Khách đã xác nhận nhận tiền',
+    surface: 'border-emerald-300 bg-emerald-100 text-emerald-900',
+    dot: 'bg-emerald-600',
+  },
+  DISPUTED: {
+    label: 'Khoản chi trả có vấn đề',
+    surface: 'border-red-300 bg-red-50 text-red-900',
+    dot: 'bg-red-600',
   },
 } as const satisfies Record<string, StatusBadgeAppearance>;
 

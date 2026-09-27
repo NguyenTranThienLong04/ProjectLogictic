@@ -145,6 +145,24 @@ enum CODTransactionStatus {
   DISPUTED
 }
 
+enum CODRemittanceStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum CODPayoutStatus {
+  PENDING
+  SENT
+  PAID_OUT
+  DISPUTED
+}
+
+enum CODPayoutMethod {
+  BANK_TRANSFER
+  CASH
+}
+
 enum DeliveryFailureReason {
   RECIPIENT_UNAVAILABLE
   RECIPIENT_REJECTED
@@ -207,6 +225,10 @@ model User {
   shippingFeeDisputesResolved ShippingFeeDispute[]     @relation("ShippingFeeDisputeResolver")
   shippingFeePaymentsStarted  ShippingFeePayment[]     @relation("ShippingFeePaymentInitiator")
   notifications               Notification[]
+  codRemittancesReviewed      CODRemittance[]          @relation("CODRemittanceReviewer")
+  codPayoutsReceived          CODPayout[]              @relation("CODPayoutCustomer")
+  codPayoutsCreated           CODPayout[]              @relation("CODPayoutCreator")
+  codPayoutsSent              CODPayout[]              @relation("CODPayoutSender")
 
   @@index([role, status])
 }
@@ -337,13 +359,64 @@ model CODTransaction {
   collectedAt         DateTime?            @db.Timestamptz(3)
   remittedAt          DateTime?            @db.Timestamptz(3)
   settledAt           DateTime?            @db.Timestamptz(3)
+  version             Int                  @default(0)
   createdAt           DateTime             @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime             @updatedAt @db.Timestamptz(3)
   shipment            Shipment             @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
   collectedByDriver   DriverProfile?       @relation(fields: [collectedByDriverId], references: [id], onDelete: Restrict)
+  remittances         CODRemittance[]
+  payout              CODPayout?
 
   @@index([status, createdAt])
   @@index([collectedByDriverId, status])
+}
+
+model CODRemittance {
+  id                  String              @id @default(uuid()) @db.Uuid
+  codTransactionId    String              @db.Uuid
+  amount              Int
+  clientRequestId     String              @db.Uuid
+  submittedByDriverId String              @db.Uuid
+  submittedAt         DateTime            @default(now()) @db.Timestamptz(3)
+  status              CODRemittanceStatus @default(PENDING)
+  reviewedByAdminId   String?             @db.Uuid
+  reviewedAt          DateTime?           @db.Timestamptz(3)
+  rejectionReason     String?             @db.VarChar(500)
+  note                String?             @db.VarChar(500)
+  version             Int                 @default(0)
+  updatedAt           DateTime            @updatedAt @db.Timestamptz(3)
+  codTransaction      CODTransaction      @relation(fields: [codTransactionId], references: [id], onDelete: Restrict)
+  submittedByDriver   DriverProfile       @relation(fields: [submittedByDriverId], references: [id], onDelete: Restrict)
+  reviewedByAdmin     User?               @relation("CODRemittanceReviewer", fields: [reviewedByAdminId], references: [id], onDelete: Restrict)
+
+  @@unique([codTransactionId, clientRequestId])
+  @@index([status, submittedAt])
+}
+
+model CODPayout {
+  id                  String          @id @default(uuid()) @db.Uuid
+  codTransactionId    String          @unique @db.Uuid
+  customerId          String          @db.Uuid
+  amount              Int
+  method              CODPayoutMethod
+  reference           String?         @db.VarChar(200)
+  note                String?         @db.VarChar(500)
+  status              CODPayoutStatus @default(PENDING)
+  createdByAdminId    String          @db.Uuid
+  sentByAdminId       String?         @db.Uuid
+  sentAt              DateTime?       @db.Timestamptz(3)
+  customerConfirmedAt DateTime?       @db.Timestamptz(3)
+  disputedAt          DateTime?       @db.Timestamptz(3)
+  disputeReason       String?         @db.VarChar(500)
+  version             Int             @default(0)
+  createdAt           DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime        @updatedAt @db.Timestamptz(3)
+  codTransaction      CODTransaction  @relation(fields: [codTransactionId], references: [id], onDelete: Restrict)
+  customer            User            @relation("CODPayoutCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  createdByAdmin      User            @relation("CODPayoutCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  sentByAdmin         User?           @relation("CODPayoutSender", fields: [sentByAdminId], references: [id], onDelete: Restrict)
+
+  @@index([customerId, status])
 }
 
 model ShippingFeeTransaction {
@@ -491,6 +564,7 @@ model DriverProfile {
   assignments            DriverAssignment[]
   deliveryAttempts       DeliveryAttempt[]
   codCollections         CODTransaction[]
+  codRemittances         CODRemittance[]
   shippingFeeCollections ShippingFeeTransaction[] @relation("ShippingFeeCollector")
   shippingFeeRemittances ShippingFeeTransaction[] @relation("ShippingFeeRemitter")
   lineHaulTrips          LineHaulTrip[]
