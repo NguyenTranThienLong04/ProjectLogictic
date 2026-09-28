@@ -84,7 +84,12 @@ function bodyFrom<T>(response: Response): ApiEnvelope<T> {
   return body as ApiEnvelope<T>;
 }
 
-describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => {
+describe.each([
+  { payer: ShippingFeePayer.RECEIVER, feeStage: 'COLLECTED' },
+  { payer: ShippingFeePayer.SENDER, feeStage: 'COLLECTED' },
+  { payer: ShippingFeePayer.SENDER, feeStage: 'REMITTED' },
+  { payer: ShippingFeePayer.SENDER, feeStage: 'SETTLED' },
+])('Operational flow: $payer fee $feeStage before delivery (e2e)', ({ payer, feeStage }) => {
   let app: INestApplication;
   let server: Server;
   let prisma: PrismaService;
@@ -200,6 +205,20 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
     redis = app.get(RedisService);
     if (!redis.isAvailable()) {
       throw new Error('Full operational E2E requires the configured development Redis instance');
+    }
+    // Each parameterized journey has its own login quota in the disposable P0 runner.
+    // Keep production throttling intact; never clear counters on another target.
+    if (process.env.P0_REGRESSION === 'true') {
+      const url = new URL(process.env.DATABASE_URL!);
+      if (
+        url.hostname !== '127.0.0.1' ||
+        !/^\/p0_regression_\d+$/.test(url.pathname) ||
+        process.env.REDIS_URL !== 'redis://127.0.0.1:56379/2'
+      ) {
+        throw new Error('P0 rate isolation requires the dedicated localhost database and Redis /2');
+      }
+      const keys = await redis.getClient().keys('rate-limit:*');
+      if (keys.length) await redis.getClient().del(...keys);
     }
 
     const passwordHash = await app.get(PasswordHasherService).hash(password);
@@ -381,6 +400,11 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
   });
 
   it('creates, confirms, ranks pickup candidates, renders the pickup task, and picks up once', async () => {
+    await request(server)
+      .post('/api/v1/pricing/config')
+      .set('Authorization', `Bearer ${token('admin')}`)
+      .send({ baseFee: 0, includedWeightGrams: 1000, extraWeightFeePerKg: 0, codFeeBasisPoints: 0 })
+      .expect(400);
     const addressResponse = await request(server)
       .post('/api/v1/addresses')
       .set('Authorization', `Bearer ${token('customer')}`)
@@ -422,7 +446,7 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
         heightCm: 15,
       },
       codAmount: 450_000,
-      shippingFeePayer: ShippingFeePayer.RECEIVER,
+      shippingFeePayer: payer,
     };
     const createResponse = await request(server)
       .post('/api/v1/shipments')
@@ -437,7 +461,7 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
     expect(created).toMatchObject({
       status: ShipmentStatus.PENDING,
       codAmount: 450_000,
-      shippingFeePayer: ShippingFeePayer.RECEIVER,
+      shippingFeePayer: payer,
     });
     expect(trackingCode).toMatch(/^SHP-/);
 
@@ -545,7 +569,10 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
     const pickupResponse = await request(server)
       .post(`/api/v1/driver/assignments/${pickupAssignmentId}/pickup`)
       .set('Authorization', `Bearer ${token('pickupNear')}`)
-      .send({ note: 'Pickup proof: sealed parcel received from sender' })
+      .send({
+        note: 'Pickup proof: sealed parcel received from sender',
+        ...(payer === ShippingFeePayer.SENDER ? { shippingFeeAmount: originalTotalFee } : {}),
+      })
       .expect(200);
     expect(
       bodyFrom<{ status: DriverAssignmentStatus; shipmentStatus: ShipmentStatus }>(pickupResponse)
@@ -558,7 +585,10 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
     await request(server)
       .post(`/api/v1/driver/assignments/${pickupAssignmentId}/pickup`)
       .set('Authorization', `Bearer ${token('pickupNear')}`)
-      .send({ note: 'Duplicate pickup retry must return the committed proof' })
+      .send({
+        note: 'Duplicate pickup retry must return the committed proof',
+        ...(payer === ShippingFeePayer.SENDER ? { shippingFeeAmount: originalTotalFee } : {}),
+      })
       .expect(200);
     expect(await historyCounts()).toEqual(countsAfterPickup);
     await expect(
@@ -567,8 +597,37 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
       status: ShipmentStatus.PICKED_UP,
       originWarehouseId,
       currentWarehouseId: null,
-      shippingFeePayer: ShippingFeePayer.RECEIVER,
+      shippingFeePayer: payer,
     });
+
+    if (payer === ShippingFeePayer.SENDER) {
+      const fee = await prisma.shippingFeeTransaction.findUniqueOrThrow({ where: { shipmentId } });
+      expect(fee).toMatchObject({
+        status: 'COLLECTED',
+        collectedAmount: originalTotalFee,
+        collectedByDriverId: pickupNearId,
+      });
+      if (feeStage !== 'COLLECTED') {
+        await request(server)
+          .post(`/api/v1/shipping-fees/${fee.id}/remit`)
+          .set('Authorization', `Bearer ${token('pickupNear')}`)
+          .send({ amount: originalTotalFee })
+          .expect(200);
+      }
+      if (feeStage === 'SETTLED') {
+        await request(server)
+          .post(`/api/v1/shipping-fees/${fee.id}/settle`)
+          .set('Authorization', `Bearer ${token('admin')}`)
+          .expect(200);
+      }
+      expect(
+        await prisma.shippingFeeTransaction.findUniqueOrThrow({ where: { id: fee.id } }),
+      ).toMatchObject({
+        status: feeStage,
+        collectedAmount: originalTotalFee,
+        collectedAt: fee.collectedAt,
+      });
+    }
   });
 
   it('checks in only at origin, transfers once, receives only at destination, and becomes ready', async () => {
@@ -836,7 +895,7 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
       .send({
         receiverName: 'Operational receiver',
         note: 'POD signed and parcel intact',
-        shippingFeeAmount: originalTotalFee,
+        ...(payer === ShippingFeePayer.RECEIVER ? { shippingFeeAmount: originalTotalFee } : {}),
       })
       .expect(200);
     expect(
@@ -853,12 +912,44 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
       .send({
         receiverName: 'Operational receiver',
         note: 'Duplicate completion retry',
-        shippingFeeAmount: originalTotalFee,
+        ...(payer === ShippingFeePayer.RECEIVER ? { shippingFeeAmount: originalTotalFee } : {}),
       })
       .expect(200);
     expect(await historyCounts()).toEqual(countsAfterDelivery);
+    expect(
+      await prisma.shippingFeeTransaction.findUniqueOrThrow({ where: { shipmentId } }),
+    ).toMatchObject({ status: feeStage, collectedAmount: originalTotalFee });
+    const attempt = await prisma.deliveryAttempt.findFirstOrThrow({ where: { shipmentId } });
+    expect(
+      await prisma.auditLog.findMany({
+        where: { entityType: 'Shipment', entityId: shipmentId, action: 'DELIVERY_COMPLETE' },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        metadata: { assignmentId: deliveryAssignmentId, attemptId: attempt.id },
+      }),
+    ]);
     expect(await prisma.shipmentProof.count({ where: { shipmentId } })).toBe(2);
     expect(await prisma.deliveryAttempt.count({ where: { shipmentId } })).toBe(1);
+    if (payer === ShippingFeePayer.RECEIVER) {
+      const fee = await prisma.shippingFeeTransaction.findUniqueOrThrow({ where: { shipmentId } });
+      for (const action of ['remit', 'settle'] as const) {
+        await request(server)
+          .post(`/api/v1/shipping-fees/${fee.id}/${action}`)
+          .set('Authorization', `Bearer ${token(action === 'remit' ? 'deliveryNear' : 'admin')}`)
+          .send(action === 'remit' ? { amount: originalTotalFee } : {})
+          .expect(200);
+        const auditCount = await prisma.auditLog.count({ where: { entityId: fee.id } });
+        const countsBeforeRetry = await historyCounts();
+        await request(server)
+          .post(`/api/v1/driver/delivery-assignments/${deliveryAssignmentId}/complete`)
+          .set('Authorization', `Bearer ${token('deliveryNear')}`)
+          .send({ receiverName: 'Operational receiver', shippingFeeAmount: originalTotalFee })
+          .expect(200);
+        expect(await historyCounts()).toEqual(countsBeforeRetry);
+        expect(await prisma.auditLog.count({ where: { entityId: fee.id } })).toBe(auditCount);
+      }
+    }
     await expect(
       prisma.cODTransaction.findUniqueOrThrow({ where: { shipmentId } }),
     ).resolves.toMatchObject({
@@ -897,7 +988,7 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
       id: shipmentId,
       trackingCode,
       status: ShipmentStatus.DELIVERED,
-      shippingFeePayer: ShippingFeePayer.RECEIVER,
+      shippingFeePayer: payer,
       totalFee: originalTotalFee,
       codAmount: 450_000,
     });
@@ -934,7 +1025,7 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
     expect(bodyFrom<ShipmentPayload>(retryCreateResponse).data).toMatchObject({
       id: shipmentId,
       status: ShipmentStatus.DELIVERED,
-      shippingFeePayer: ShippingFeePayer.RECEIVER,
+      shippingFeePayer: payer,
       codAmount: 450_000,
       totalFee: originalTotalFee,
     });
@@ -949,7 +1040,7 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
         id: shipmentId,
         trackingCode,
         status: ShipmentStatus.DELIVERED,
-        shippingFeePayer: ShippingFeePayer.RECEIVER,
+        shippingFeePayer: payer,
         originWarehouse: { id: originWarehouseId },
         destinationWarehouse: { id: destinationWarehouseId },
         currentWarehouse: { id: destinationWarehouseId },
@@ -970,6 +1061,20 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
     }>(publicTrackingResponse).data;
     expect(publicTracking.status).toBe(ShipmentStatus.DELIVERED);
     expect(publicTracking.timeline.map(({ type }) => type)).toEqual(expectedTrackingTypes);
+    for (const projection of [customerShipment, publicTracking]) {
+      expect(JSON.stringify(projection)).not.toContain('Operational inter-provincial transfer');
+      expect(JSON.stringify(projection)).not.toContain('Package received intact');
+    }
+    expect(
+      await prisma.warehouseTransfer.findUniqueOrThrow({ where: { id: transferId } }),
+    ).toMatchObject({ note: 'Operational inter-provincial transfer' });
+    expect(
+      await prisma.auditLog.findFirstOrThrow({
+        where: { entityId: transferId, action: 'WAREHOUSE_TRANSFER_RECEIVED' },
+      }),
+    ).toMatchObject({
+      after: expect.objectContaining({ note: 'Package received intact' }) as unknown,
+    });
 
     const expectedAuditActions = [
       'SHIPMENT_CREATE',
@@ -1008,11 +1113,97 @@ describe('Full operational logistics flow after Realism Phase A-E (e2e)', () => 
       originWarehouseId,
       destinationWarehouseId,
       currentWarehouseId: destinationWarehouseId,
-      shippingFeePayer: ShippingFeePayer.RECEIVER,
+      shippingFeePayer: payer,
       totalFee: originalTotalFee,
       codAmount: 450_000,
     });
     expect(deliveryAttemptId).not.toBe('');
+  });
+
+  it('projects legacy transfer notes safely from PostgreSQL and old caches without rewriting history', async () => {
+    const legacy = await prisma.trackingEvent.create({
+      data: {
+        shipmentId,
+        status: ShipmentStatus.IN_TRANSIT,
+        type: 'WAREHOUSE_TRANSFER_DISPATCHED',
+        title: 'Đang trung chuyển liên kho',
+        description: 'Legacy lifecycle. Ghi chú: PRIVATE-P0-NOTE',
+        visibility: 'PUBLIC',
+      },
+    });
+    const customerPath = `/api/v1/shipments/${shipmentId}`;
+    const publicPath = `/api/v1/tracking/${trackingCode}`;
+    const keys = [`tracking:${trackingCode}`, `shipment:${shipmentId}:summary`];
+    await redis.getClient().del(...keys);
+    for (const [index, path] of [publicPath, customerPath].entries()) {
+      const read = () => {
+        const req = request(server).get(path);
+        return index === 1 ? req.set('Authorization', `Bearer ${token('customer')}`) : req;
+      };
+      const fromDb = await read().expect(200);
+      expect(JSON.stringify(fromDb.body)).not.toContain('PRIVATE-P0-NOTE');
+      const payload = bodyFrom<{ timeline: Array<{ id: string; description: string | null }> }>(
+        fromDb,
+      ).data;
+      const timeline = payload.timeline.map((event) =>
+        event.id === legacy.id ? { ...event, description: legacy.description } : event,
+      );
+      await redis.getClient().set(keys[index], JSON.stringify({ ...payload, timeline }), 'EX', 60);
+      const fromOldCache = await read().expect(200);
+      expect(JSON.stringify(fromOldCache.body)).not.toContain('PRIVATE-P0-NOTE');
+    }
+    const staff = await request(server)
+      .get(`/api/v1/warehouses/${originWarehouseId}/transfers`)
+      .set('Authorization', `Bearer ${token('originStaff')}`)
+      .expect(200);
+    expect(JSON.stringify(staff.body)).toContain('Operational inter-provincial transfer');
+    const internalAudit = await request(server)
+      .get('/api/v1/admin/audit-logs')
+      .query({ search: transferId, action: 'WAREHOUSE_TRANSFER_RECEIVED' })
+      .set('Authorization', `Bearer ${token('admin')}`)
+      .expect(200);
+    expect(JSON.stringify(internalAudit.body)).toContain('Package received intact');
+    await request(server)
+      .get(`/api/v1/warehouses/${originWarehouseId}/transfers`)
+      .set('Authorization', `Bearer ${token('customer')}`)
+      .expect(403);
+    expect(await prisma.trackingEvent.findUniqueOrThrow({ where: { id: legacy.id } })).toEqual(
+      legacy,
+    );
+  });
+
+  it('finds legacy delivery audit by shipment without rewriting the original record', async () => {
+    const current = await prisma.auditLog.findFirstOrThrow({
+      where: { entityType: 'Shipment', entityId: shipmentId, action: 'DELIVERY_COMPLETE' },
+    });
+    const legacy = await prisma.auditLog.create({
+      data: {
+        actorId: current.actorId,
+        actorRole: current.actorRole,
+        action: 'DELIVERY_COMPLETE',
+        entityType: 'Shipment',
+        entityId: deliveryAttemptId,
+      },
+    });
+    const unrelated = await prisma.auditLog.create({
+      data: {
+        actorId: current.actorId,
+        actorRole: current.actorRole,
+        action: 'UNRELATED_ACTION',
+        entityType: 'Shipment',
+        entityId: deliveryAttemptId,
+      },
+    });
+    const response = await request(server)
+      .get('/api/v1/admin/audit-logs')
+      .query({ search: shipmentId, entityType: 'Shipment' })
+      .set('Authorization', `Bearer ${token('admin')}`)
+      .expect(200);
+    const ids = bodyFrom<{ items: Array<{ id: string }> }>(response).data.items.map(({ id }) => id);
+    expect(ids).toContain(current.id);
+    expect(ids).toContain(legacy.id);
+    expect(ids).not.toContain(unrelated.id);
+    expect(await prisma.auditLog.findUniqueOrThrow({ where: { id: legacy.id } })).toEqual(legacy);
   });
 
   async function connectCustomerSocket(): Promise<Socket> {

@@ -76,6 +76,8 @@ describe('AuthService refresh validity and atomic rotation (repository mocked)',
       },
     };
     const transaction = {
+      $queryRaw: jest.fn(() => Promise.resolve([{ id: current.userId }])),
+      user: { findUnique: jest.fn(() => Promise.resolve(current.user)) },
       authSession: {
         findUnique: jest.fn<() => Promise<typeof current | null>>().mockResolvedValue(current),
         updateMany: jest.fn<() => Promise<{ count: number }>>().mockResolvedValue({ count: 1 }),
@@ -156,4 +158,54 @@ describe('AuthService refresh validity and atomic rotation (repository mocked)',
     transaction.authSession.findUnique.mockRejectedValue(unavailable);
     await expect(service.refresh('old')).rejects.toBe(unavailable);
   });
+
+  it.each(['password', 'version', 'status'])(
+    'rejects refresh when current %s changed after reading the session',
+    async (kind) => {
+      const { service, current, transaction } = setup();
+      transaction.user.findUnique.mockResolvedValue({
+        ...current.user,
+        ...(kind === 'password' ? { passwordHash: 'changed' } : {}),
+        ...(kind === 'version' ? { tokenVersion: 1 } : {}),
+        ...(kind === 'status' ? { status: UserStatus.SUSPENDED } : {}),
+      });
+      await expect(service.refresh('old')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(transaction.authSession.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['unchanged', 'password', 'version', 'status'])(
+    'validates login credential under the transaction lock: %s',
+    async (kind) => {
+      const { current, transaction, tokens } = setup();
+      transaction.user.findUnique.mockResolvedValue({
+        ...current.user,
+        ...(kind === 'password' ? { passwordHash: 'changed' } : {}),
+        ...(kind === 'version' ? { tokenVersion: 1 } : {}),
+        ...(kind === 'status' ? { status: UserStatus.SUSPENDED } : {}),
+      });
+      const prisma = {
+        user: { findUnique: jest.fn(() => Promise.resolve(current.user)) },
+        $transaction: jest.fn((callback: (tx: typeof transaction) => unknown) =>
+          callback(transaction),
+        ),
+      } as unknown as PrismaService;
+      const service = new AuthService(
+        prisma,
+        {
+          verify: jest.fn(() => Promise.resolve(true)),
+        } as unknown as PasswordHasherService,
+        tokens as unknown as TokenService,
+      );
+      const login = service.login({ email: current.user.email, password: 'old-password' });
+      if (kind === 'unchanged') {
+        await expect(login).resolves.toMatchObject({ accessToken: 'new-access' });
+        expect(transaction.authSession.create).toHaveBeenCalledTimes(1);
+      } else {
+        await expect(login).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(transaction.authSession.create).not.toHaveBeenCalled();
+      }
+      expect(transaction.$queryRaw).toHaveBeenCalledTimes(1);
+    },
+  );
 });

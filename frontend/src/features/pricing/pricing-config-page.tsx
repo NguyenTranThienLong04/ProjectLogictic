@@ -19,7 +19,7 @@ const schema = z.object({
   baseFee: z
     .number({ error: 'Vui lòng nhập phí cơ bản.' })
     .int('Nhập số nguyên VND.')
-    .min(0, 'Phí không được âm.')
+    .min(1, 'Phí cơ bản tối thiểu 1 VND.')
     .max(10_000_000, 'Phí tối đa 10.000.000 VND.'),
   includedWeightGrams: z
     .number({ error: 'Vui lòng nhập khối lượng.' })
@@ -160,11 +160,11 @@ export function PricingConfigPage() {
                 ) : null}
                 <FormField
                   error={formState.errors.baseFee?.message}
-                  helperText="Đơn vị VND, bao gồm khối lượng định mức."
+                  helperText="Tối thiểu 1 VND, bao gồm khối lượng định mức."
                   id="pricing-base"
                   inputMode="numeric"
                   label="Phí cơ bản"
-                  min="0"
+                  min="1"
                   type="number"
                   {...register('baseFee', { valueAsNumber: true })}
                 />

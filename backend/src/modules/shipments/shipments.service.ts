@@ -13,7 +13,7 @@ import type { CreateShipmentDto } from './dto/create-shipment.dto.js';
 import type { ListShipmentsDto } from './dto/list-shipments.dto.js';
 import { CancellationPolicy } from './cancellation.policy.js';
 import {
-  mapTimeline,
+  mapPublicTimeline,
   type AddressSnapshot,
   type ContactSnapshot,
   type PackageSnapshot,
@@ -218,7 +218,9 @@ export class ShipmentsService {
     const cached = await this.cache.get<ShipmentResponse>(cacheKey);
     // COD changes independently of shipment lifecycle/cache invalidation.
     const codStatus = owned.codTransaction?.status ?? null;
-    if (cached?.shippingFee) return { ...cached, codStatus };
+    if (cached?.shippingFee) {
+      return { ...cached, codStatus, timeline: cached.timeline.map(mapPublicTimeline) };
+    }
     const shipment = await this.prisma.shipment.findUniqueOrThrow({
       where: { id: shipmentId },
       include: {
@@ -319,7 +321,7 @@ export class ShipmentsService {
     originCity: string;
     destinationCity: string;
     createdAt: Date;
-    timeline: ReturnType<typeof mapTimeline>[];
+    timeline: ReturnType<typeof mapPublicTimeline>[];
   }> {
     const normalizedTrackingCode = trackingCode.trim().toUpperCase();
     const cacheKey = this.cache.trackingKey(normalizedTrackingCode);
@@ -329,9 +331,9 @@ export class ShipmentsService {
       originCity: string;
       destinationCity: string;
       createdAt: Date;
-      timeline: ReturnType<typeof mapTimeline>[];
+      timeline: ReturnType<typeof mapPublicTimeline>[];
     }>(cacheKey);
-    if (cached) return cached;
+    if (cached) return { ...cached, timeline: cached.timeline.map(mapPublicTimeline) };
     const shipment = await this.prisma.shipment.findUnique({
       where: { trackingCode: normalizedTrackingCode },
       include: {
@@ -350,7 +352,7 @@ export class ShipmentsService {
       originCity: pickup.city,
       destinationCity: delivery.city,
       createdAt: shipment.createdAt,
-      timeline: shipment.trackingEvents.map(mapTimeline),
+      timeline: shipment.trackingEvents.map(mapPublicTimeline),
     };
     await this.cache.set(cacheKey, response, this.cache.trackingTtlSeconds);
     return response;
@@ -391,7 +393,9 @@ export class ShipmentsService {
       cancelledAt: shipment.cancelledAt,
       createdAt: shipment.createdAt,
       updatedAt: shipment.updatedAt,
-      timeline: shipment.trackingEvents.map(mapTimeline),
+      timeline: shipment.trackingEvents
+        .filter((event) => event.visibility === TrackingVisibility.PUBLIC)
+        .map(mapPublicTimeline),
     };
   }
 

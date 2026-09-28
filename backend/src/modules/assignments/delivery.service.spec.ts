@@ -298,6 +298,17 @@ describe('DeliveryService', () => {
 
     await service(prisma).complete(actor, assignmentId, { receiverName: 'Receiver' }, {});
 
+    expect(tx.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          entityType: 'Shipment',
+          entityId: shipmentId,
+          action: 'DELIVERY_COMPLETE',
+          metadata: { assignmentId, attemptId: current.deliveryAttempts[0]?.id },
+        }) as unknown,
+      }),
+    );
+
     const codData = createCodTransaction.mock.calls[0]?.[0].data;
     expect(codData).toMatchObject({
       shipmentId,
@@ -444,6 +455,20 @@ describe('DeliveryService', () => {
     );
 
     expect(tx.deliveryAttempt.update).toHaveBeenCalledTimes(1);
+    expect(tx.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          entityType: 'Shipment',
+          entityId: shipmentId,
+          action: 'DELIVERY_FAIL',
+          metadata: {
+            assignmentId,
+            attemptId: current.deliveryAttempts[0]?.id,
+            note: 'RECIPIENT_UNAVAILABLE',
+          },
+        }) as unknown,
+      }),
+    );
     expect(result.attempt?.attemptNumber).toBe(1);
   });
 

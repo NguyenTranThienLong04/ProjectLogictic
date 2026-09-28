@@ -179,9 +179,7 @@ export class WarehouseTransferLifecycleService {
         status: ShipmentStatus.IN_TRANSIT,
         type: 'WAREHOUSE_TRANSFER_DISPATCHED',
         title: 'Đang trung chuyển liên kho',
-        description: `Kiện hàng đang được chuyển từ ${transfer.fromWarehouse.name} đến ${transfer.toWarehouse.name}.${
-          transfer.note ? ` Ghi chú: ${transfer.note}` : ''
-        }`,
+        description: `Kiện hàng đang được chuyển từ ${transfer.fromWarehouse.name} đến ${transfer.toWarehouse.name}.`,
         visibility: TrackingVisibility.PUBLIC,
         actorId: input.actor.id,
         warehouseId: input.warehouseId,
@@ -288,9 +286,7 @@ export class WarehouseTransferLifecycleService {
         status: ShipmentStatus.AT_DESTINATION_WAREHOUSE,
         type: 'WAREHOUSE_TRANSFER_RECEIVED',
         title: 'Đã nhập kho đích',
-        description: `Kiện hàng đã đến kho ${transfer.toWarehouse.name} (${transfer.toWarehouse.code}).${
-          input.dto.note ? ` Ghi chú: ${input.dto.note}` : ''
-        }`,
+        description: `Kiện hàng đã đến kho ${transfer.toWarehouse.name} (${transfer.toWarehouse.code}).`,
         visibility: TrackingVisibility.PUBLIC,
         actorId: input.actor.id,
         warehouseId: input.warehouseId,

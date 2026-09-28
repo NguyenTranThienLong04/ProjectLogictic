@@ -342,6 +342,7 @@ describe('ShipmentsService', () => {
             id: shipmentId,
             shippingFee: { status: 'COLLECTED' },
             codStatus: 'COLLECTED',
+            timeline: [],
           }),
         ) as CacheService['get'],
       });
@@ -454,4 +455,30 @@ describe('ShipmentsService', () => {
     expect(trackingKey).toHaveBeenCalledWith('SHP-20260817-A1B2C3D4');
     expect(findUnique).not.toHaveBeenCalled();
   });
+
+  it.each(['WAREHOUSE_TRANSFER_DISPATCHED', 'WAREHOUSE_TRANSFER_RECEIVED'])(
+    'redacts legacy %s operational notes on both database and pre-fix cache reads',
+    async (type) => {
+      const legacyEvent = { ...event(), type, description: 'Lifecycle. Ghi chú: INTERNAL-SECRET' };
+      const findUnique = jest.fn(() =>
+        Promise.resolve({ ...shipment(), trackingEvents: [legacyEvent] }),
+      );
+      const prisma = { shipment: { findUnique } } as unknown as PrismaService;
+      const result = await serviceWith(prisma).publicTracking('SHP-20260817-A1B2C3D4');
+      expect(JSON.stringify(result)).not.toContain('INTERNAL-SECRET');
+      expect(result.timeline[0]).toMatchObject({
+        id: legacyEvent.id,
+        type,
+        status: legacyEvent.status,
+      });
+      const oldCache = { ...result, timeline: [legacyEvent] };
+      const get: CacheService['get'] = <T>() => Promise.resolve(oldCache as T);
+      const cached = await serviceWith(prisma, cacheService({ get })).publicTracking(
+        result.trackingCode,
+      );
+      expect(JSON.stringify(cached)).not.toContain('INTERNAL-SECRET');
+      expect(legacyEvent.description).toContain('INTERNAL-SECRET');
+      expect(findUnique).toHaveBeenCalledTimes(1);
+    },
+  );
 });

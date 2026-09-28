@@ -3,10 +3,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsInt, Max, Min } from 'class-validator';
 
 export class CreatePricingConfigDto {
-  @ApiProperty({ example: 30000, minimum: 0 })
+  @ApiProperty({ example: 30000, minimum: 1 })
   @Type(() => Number)
   @IsInt()
-  @Min(0)
+  @Min(1)
   @Max(10_000_000)
   baseFee!: number;
 

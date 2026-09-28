@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { isUUID } from 'class-validator';
 import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { ListAuditLogsDto } from './dto/list-audit-logs.dto.js';
@@ -9,6 +10,33 @@ export class AuditService {
 
   async list(query: ListAuditLogsDto) {
     const search = query.search?.trim();
+    // Old delivery logs used attempt/assignment IDs while declaring Shipment.
+    // Resolve only proven relational matches for shipment-ID searches; keep rows intact.
+    const legacyReferences: Prisma.AuditLogWhereInput[] = [];
+    if (search && isUUID(search)) {
+      const [attempts, assignments] = await Promise.all([
+        this.prisma.deliveryAttempt.findMany({
+          where: { shipmentId: search },
+          select: { id: true },
+        }),
+        this.prisma.driverAssignment.findMany({
+          where: { shipmentId: search, type: 'DELIVERY' },
+          select: { id: true },
+        }),
+      ]);
+      if (attempts.length)
+        legacyReferences.push({
+          entityType: 'Shipment',
+          action: { in: ['DELIVERY_COMPLETE', 'DELIVERY_FAIL', 'RETURN_START'] },
+          entityId: { in: attempts.map(({ id }) => id) },
+        });
+      if (assignments.length)
+        legacyReferences.push({
+          entityType: 'Shipment',
+          action: { in: ['DELIVERY_DRIVER_ASSIGN', 'DELIVERY_START'] },
+          entityId: { in: assignments.map(({ id }) => id) },
+        });
+    }
     const toDateExclusive = query.toDate
       ? new Date(new Date(`${query.toDate}T00:00:00.000Z`).getTime() + 86_400_000)
       : undefined;
@@ -35,6 +63,7 @@ export class AuditService {
               { entityId: { contains: search, mode: 'insensitive' } },
               { actor: { fullName: { contains: search, mode: 'insensitive' } } },
               { actor: { email: { contains: search, mode: 'insensitive' } } },
+              ...legacyReferences,
             ],
           }
         : {}),

@@ -107,13 +107,19 @@ export type ShipmentWithShippingFee = Shipment & {
   shippingFeeTransaction: ShippingFeeTransaction | null;
 };
 
-export function mapTimeline(event: TrackingEvent): TrackingEventResponse {
+// Legacy transfer descriptions contain free-form staff notes. Public/customer reads
+// project lifecycle text without changing the append-only operational history.
+export function mapPublicTimeline(event: TrackingEventResponse): TrackingEventResponse {
+  const descriptions: Record<string, string> = {
+    WAREHOUSE_TRANSFER_DISPATCHED: 'Kiện hàng đang được trung chuyển liên kho.',
+    WAREHOUSE_TRANSFER_RECEIVED: 'Kiện hàng đã được tiếp nhận tại kho đích.',
+  };
   return {
     id: event.id,
     status: event.status,
     type: event.type,
     title: event.title,
-    description: event.description,
+    description: descriptions[event.type] ?? event.description,
     createdAt: event.createdAt,
   };
 }

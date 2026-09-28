@@ -1,5 +1,7 @@
 import type { PricingConfig } from '../../generated/prisma/client.js';
 import type { PrismaService } from '../../database/prisma.service.js';
+import { validate } from 'class-validator';
+import { CreatePricingConfigDto } from './dto/create-pricing-config.dto.js';
 import { PricingService } from './pricing.service.js';
 
 function config(overrides: Partial<PricingConfig> = {}): PricingConfig {
@@ -22,6 +24,41 @@ function config(overrides: Partial<PricingConfig> = {}): PricingConfig {
 
 describe('PricingService', () => {
   const service = new PricingService({} as PrismaService);
+
+  it.each([0, -1])(
+    'rejects legacy config producing totalFee=%s before quote or shipment creation',
+    (baseFee) => {
+      expect(() => service.calculate(1000, 0, config({ baseFee }))).toThrow(
+        'Shipping fee must be a positive integer VND amount',
+      );
+    },
+  );
+
+  it('allows the minimum positive integer fee and zero variable components', () => {
+    expect(
+      service.calculate(
+        1000,
+        0,
+        config({ baseFee: 1, extraWeightFeePerKg: 0, codFeeBasisPoints: 0 }),
+      ).totalFee,
+    ).toBe(1);
+  });
+
+  it('rejects discounts that reduce the calculated total to zero', () => {
+    expect(() => service.calculate(1000, 0, config({ discount: 30000 }))).toThrow();
+  });
+
+  it('rejects zero base fee in config input but permits zero variable fees', async () => {
+    const dto = Object.assign(new CreatePricingConfigDto(), {
+      baseFee: 0,
+      includedWeightGrams: 1000,
+      extraWeightFeePerKg: 0,
+      codFeeBasisPoints: 0,
+    });
+    expect((await validate(dto)).map((error) => error.property)).toEqual(['baseFee']);
+    dto.baseFee = 1;
+    expect(await validate(dto)).toEqual([]);
+  });
 
   it('includes the first kilogram in the base fee', () => {
     expect(service.calculate(1_000, 0, config())).toEqual({

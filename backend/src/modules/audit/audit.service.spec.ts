@@ -4,6 +4,45 @@ import type { PrismaService } from '../../database/prisma.service.js';
 import { AuditService } from './audit.service.js';
 
 describe('AuditService', () => {
+  it('finds legacy delivery logs through proven shipment relations without rewriting their entity IDs', async () => {
+    const shipmentId = '11111111-1111-4111-8111-111111111111';
+    const findMany = jest.fn(() => Promise.resolve([]));
+    const count = jest.fn(() => Promise.resolve(0));
+    const findAttempts = jest.fn(() => Promise.resolve([{ id: 'attempt-id' }]));
+    const prisma = {
+      auditLog: { findMany, count },
+      deliveryAttempt: { findMany: findAttempts },
+      driverAssignment: { findMany: jest.fn(() => Promise.resolve([{ id: 'assignment-id' }])) },
+    } as unknown as PrismaService;
+    await new AuditService(prisma).list({
+      search: shipmentId,
+      entityType: 'Shipment',
+      page: 1,
+      limit: 20,
+    });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            {
+              entityType: 'Shipment',
+              action: { in: ['DELIVERY_COMPLETE', 'DELIVERY_FAIL', 'RETURN_START'] },
+              entityId: { in: ['attempt-id'] },
+            },
+            {
+              entityType: 'Shipment',
+              action: { in: ['DELIVERY_DRIVER_ASSIGN', 'DELIVERY_START'] },
+              entityId: { in: ['assignment-id'] },
+            },
+          ]) as unknown,
+        }) as unknown,
+      }),
+    );
+    expect(findAttempts).toHaveBeenCalledWith({
+      where: { shipmentId },
+      select: { id: true },
+    });
+  });
   it('uses bounded pagination and server-side admin audit filters', async () => {
     const findMany = jest.fn(() => Promise.resolve([]));
     const count = jest.fn(() => Promise.resolve(0));

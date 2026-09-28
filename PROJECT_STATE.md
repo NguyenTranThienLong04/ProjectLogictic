@@ -1,8 +1,10 @@
 # Current Phase
 
-Phase I3 - Staging Provision & Deployment (2026-09-09): Neon 25/25 canonical migrations/checksums/drift PASS; main release 87c82b87f45e264088bd17729dd2f37928392ea9 has green hosted Linux CI and three published GHCR digests. BLOCKED on runtime services/target and backup evidence. No application deployment, production or I4. See docs/STAGING_VALIDATION_I3.md.
+Phase 1 P0 Fix (2026-09-28): shipping-fee delivery/retry evidence, credential/session concurrency, public transfer-note projection, delivery audit identity/history lookup and user-approved positive-fee policy fixed. Local regression PASS; no staging deployment. Report: docs/PHASE1_P0_FIX_20260928.md. Existing I3 release gates remain separate.
 
 # Completed
+
+- Phase 1 verified P0 fixes (2026-09-28): backend 479/479, isolated PostgreSQL/Nest/Redis E2E 44/44, frontend 64/64, auth browser role/race regression and pricing/public-tracking at four viewports PASS; lint/typecheck/build PASS. Full pickup → collect → remit/settle → delivery/retry and login → change/reset → session validation covered. New audit rows use shipmentId; legacy search follows proven relations without updates. Old note-bearing tracking/cache payloads projected safely; original records retained. User explicitly forbids totalFee=0. No schema migration, remote data mutation, deployment, feature or performance work. C01/C04–C10/C12/C15/C16/C18. Details: `docs/PHASE1_P0_FIX_20260928.md`.
 
 - Auth reload audit (2026-09-28): confirmed Chrome blocks staging `SameSite=Lax` refresh cookie (`SchemefulSameSiteLax`); F5 sends no cookie -> 401 `AUTH_REFRESH_TOKEN_INVALID`. Operator deployed `REFRESH_COOKIE_SAME_SITE=none`; actual Secure/HttpOnly/host-only cookie now sent, refresh 200, Customer/Admin/Driver dashboard/nested F5 + three tabs + logout/reload staging PASS. Local auth-invalid classification, restore error/retry, revision fencing, local-only invalidation and serialized logout hardening retain memory-only tokens. Backend focused 33/33, frontend 64/64, browser role/race/failure matrix, builds/typecheck/lint PASS. Hardening source not committed/pushed/deployed; failure injection/expiry verified locally, not staging. C01/C04/C16; no migration/business data change. Evidence: `docs/AUTH_RELOAD_AUDIT_20260928.md`.
 
@@ -272,6 +274,8 @@ Phase I3 - Staging Provision & Deployment (2026-09-09): Neon 25/25 canonical mig
 
 # Next
 
+- Phase 1 P0: review/freeze changes, run pinned Node 22/Linux CI and existing release gates, then follow the staging-only rollout/smoke plan in `docs/PHASE1_P0_FIX_20260928.md`. Local Node 24 regression PASS; staging not deployed or verified by this task. No automatic history backfill or P1/P2/P3 expansion.
+
 - Bind remaining services/access in docs/STAGING_VALIDATION_I3.md, then agent injects ignored runtime/deployment env through the target secret manager, verifies image pulls and existing migration history, deploys one backend/frontend and runs staging-safe operational/backup/rollback validation. Neon is already migrated; do not reset/replay main. Keep published source/digests frozen. Review final documentation changes through protected-branch flow. Stop after I3; no production or I4.
 - G3B2 deliberately has no silent automatic reroute: Admin/Dispatcher must confirm `Tính lại tuyến` after an operational deviation warning.
 - Production route provider remains a release decision: choose managed Google/Mapbox or self-hosted OSRM, approve credentials/billing/license/attribution, then relax the production `ROUTE_PROVIDER=DISABLED` validation deliberately.
@@ -292,6 +296,8 @@ Phase I3 - Staging Provision & Deployment (2026-09-09): Neon 25/25 canonical mig
 - Phase F intentionally covers Chromium behavior rather than pixel-perfect or Firefox/WebKit visual regression. The hosted development PostgreSQL showed variable latency, so the deterministic final browser run used a disposable local PostgreSQL 17 database; a combined backend E2E invocation also requires an isolated Redis DB to avoid consuming the product's global `100 requests / 60 seconds` test-IP budget.
 
 # Important Decisions
+
+- 2026-09-28 user decision: shipping totalFee must be a positive integer VND amount; zero-fee is unsupported. New baseFee minimum is 1 VND; existing configurations/snapshots are preserved and invalid legacy totals fail explicitly. Phase 1 requires no migration or historical rewrite.
 
 - COD handover and Customer payout are separate aggregates from canonical COD and Shipping Fee. Only company receipt confirmation can turn a new handover into REMITTED; SETTLED is internal reconciliation. Customer payout PAID_OUT requires the owning Customer's explicit receipt acknowledgment; SENT/DISPUTED remain awaiting payout. Historical ledger rows are never backfilled with invented proof. See DOMAIN for the canonical command and calculation policies.
 

@@ -313,6 +313,23 @@ describe('Phase 5 Last-Mile return workflow (e2e)', () => {
       .send({ reason: 'RECIPIENT_UNAVAILABLE', note: 'Recipient did not answer' })
       .expect(200);
 
+    const failedAttempt = await prisma.deliveryAttempt.findFirstOrThrow({
+      where: { shipmentId, driverAssignmentId: assignment.id },
+    });
+    expect(
+      await prisma.auditLog.findMany({
+        where: { entityType: 'Shipment', entityId: shipmentId, action: 'DELIVERY_FAIL' },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        metadata: {
+          assignmentId: assignment.id,
+          attemptId: failedAttempt.id,
+          note: 'RECIPIENT_UNAVAILABLE',
+        },
+      }),
+    ]);
+
     const requested = await request(server)
       .post(`/api/v1/dispatcher/shipments/${shipmentId}/return/request`)
       .set('Authorization', `Bearer ${dispatcherToken}`)

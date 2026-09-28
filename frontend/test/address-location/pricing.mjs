@@ -75,11 +75,15 @@ try {
     await base.fill('-1'); await weight.fill('0'); await cod.fill('10001');
     await save.click();
     await expect(base).toHaveAttribute('aria-invalid', 'true');
-    await expect(page.getByText('Phí không được âm.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Phí cơ bản tối thiểu 1 VND.', { exact: true })).toBeVisible();
     await expect(page.getByText('Khối lượng tối thiểu 1 gram.', { exact: true })).toBeVisible();
     await expect(page.getByText('Phí COD tối đa 10.000 basis points (100%).', { exact: true })).toBeVisible();
     assert.equal(posts, 0);
-    await base.fill('30000'); await weight.fill('1000'); await cod.fill('50');
+    await base.fill('0'); await weight.fill('1000'); await cod.fill('50');
+    await save.click();
+    await expect(page.getByText('Phí cơ bản tối thiểu 1 VND.', { exact: true })).toBeVisible();
+    assert.equal(posts, 0, 'Zero base fee must not be submitted');
+    await base.fill('30000');
     rejectSave = true;
     let releasePost;
     holdPost = new Promise(resolve => { releasePost = resolve; });

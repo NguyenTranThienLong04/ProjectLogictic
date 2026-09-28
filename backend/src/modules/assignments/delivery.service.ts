@@ -185,7 +185,7 @@ export class DeliveryService {
           'DELIVERY_DRIVER_ASSIGNED',
           'Đã phân công tài xế giao hàng',
           'DELIVERY_DRIVER_ASSIGN',
-          created.id,
+          { assignmentId: created.id },
         );
         await this.notifications.createIdempotent(tx, [
           {
@@ -291,7 +291,7 @@ export class DeliveryService {
           'OUT_FOR_DELIVERY',
           'Đang giao hàng',
           'DELIVERY_START',
-          current.id,
+          { assignmentId: current.id },
         );
         await this.notifications.createIdempotent(tx, [
           {
@@ -427,7 +427,7 @@ export class DeliveryService {
           'DELIVERED',
           'Đã giao hàng thành công',
           'DELIVERY_COMPLETE',
-          attempt.id,
+          { assignmentId: current.id, attemptId: attempt.id },
         );
         await this.notifications.createIdempotent(tx, [
           {
@@ -521,7 +521,7 @@ export class DeliveryService {
         'DELIVERY_FAILED',
         'Giao hàng chưa thành công',
         'DELIVERY_FAIL',
-        attempt.id,
+        { assignmentId: current.id, attemptId: attempt.id },
         dto.reason,
       );
       await this.notifications.createIdempotent(tx, [
@@ -603,7 +603,7 @@ export class DeliveryService {
         'RETURN_REQUESTED',
         'Đã yêu cầu hoàn hàng',
         'RETURN_REQUEST',
-        current.id,
+        {},
         dto.note,
       );
       return tx.shipment.findUniqueOrThrow({ where: { id: current.id } });
@@ -678,7 +678,7 @@ export class DeliveryService {
         'RETURN_IN_TRANSIT',
         'Đang hoàn hàng',
         'RETURN_START',
-        attempt.id,
+        { assignmentId: attempt.driverAssignmentId, attemptId: attempt.id },
       );
       await this.notifications.createIdempotent(tx, [
         {
@@ -716,18 +716,7 @@ export class DeliveryService {
       if (next === ShipmentStatus.RETURN_REQUESTED)
         this.transitionPolicy.assertReturnRequestable(current.status);
       await this.updateShipment(tx, current, next);
-      await this.trackAudit(
-        tx,
-        current,
-        actor,
-        context,
-        next,
-        type,
-        title,
-        action,
-        current.id,
-        note,
-      );
+      await this.trackAudit(tx, current, actor, context, next, type, title, action, {}, note);
       return tx.shipment.findUniqueOrThrow({ where: { id: current.id } });
     });
     await this.notifications.publishShipmentUpdated(shipmentId, next);
@@ -775,7 +764,7 @@ export class DeliveryService {
     type: string,
     title: string,
     action: string,
-    entityId: string,
+    references: { assignmentId?: string; attemptId?: string },
     note?: string,
   ) {
     await tx.trackingEvent.create({
@@ -795,10 +784,10 @@ export class DeliveryService {
         actorRole: actor.role,
         action,
         entityType: 'Shipment',
-        entityId,
+        entityId: shipment.id,
         before: { status: shipment.status, version: shipment.version },
         after: { status, version: shipment.version + 1 },
-        ...(note ? { metadata: { note } } : {}),
+        metadata: { ...references, ...(note ? { note } : {}) },
         ipAddress: context.ipAddress,
         userAgent: context.userAgent,
       },

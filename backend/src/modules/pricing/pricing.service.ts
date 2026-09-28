@@ -23,6 +23,14 @@ export class PricingService {
     const totalFee =
       config.baseFee + weightFee + codFee + config.distanceFee + config.surcharge - config.discount;
 
+    if (!Number.isSafeInteger(totalFee) || totalFee <= 0) {
+      throw new ConflictException({
+        code: 'PRICING_TOTAL_FEE_INVALID',
+        message:
+          'Shipping fee must be a positive integer VND amount; update the pricing configuration',
+      });
+    }
+
     return {
       configVersion: config.version,
       baseFee: config.baseFee,

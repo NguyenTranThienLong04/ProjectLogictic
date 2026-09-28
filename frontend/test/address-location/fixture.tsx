@@ -12,6 +12,7 @@ import { AdminDriversPage } from '../../src/features/operations/admin-drivers-pa
 import { CodDashboardPage } from '../../src/features/cod/cod-dashboard-page';
 import { CustomerDashboardPage } from '../../src/features/dashboards/customer-dashboard-page';
 import { ShipmentDetailPage } from '../../src/features/shipments/shipment-detail-page';
+import { PublicTrackingPage } from '../../src/features/shipments/public-tracking-page';
 import '../../src/styles.css';
 
 const unavailable = async () => { throw new Error('Auth actions are outside this fixture'); };
@@ -29,6 +30,7 @@ if (page.startsWith('/driver/') && auth.user) auth.user.role = 'DRIVER';
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={client}><AuthContext.Provider value={auth}><MemoryRouter initialEntries={[page]}>
     <Routes>
+      <Route path="/tracking" element={<PublicTrackingPage />} />
       <Route path="/driver/cod" element={<CodDashboardPage driver />} />
       <Route path="/admin/cod" element={<CodDashboardPage />} />
       <Route path="/customer/dashboard" element={<CustomerDashboardPage />} />

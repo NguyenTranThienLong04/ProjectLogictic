@@ -128,6 +128,11 @@ export class AuthService {
         return null;
       }
 
+      // Match credential mutation lock order: User, then AuthSession.
+      // A reset/change that won the lock must never be followed by a new session.
+      const user = await this.lockCurrentCredential(transaction, currentSession.user);
+      if (!user) return null;
+
       const revocation = await transaction.authSession.updateMany({
         where: {
           id: currentSession.id,
@@ -149,7 +154,7 @@ export class AuthService {
         },
       });
 
-      return { user: currentSession.user, sessionId: nextSession.id };
+      return { user, sessionId: nextSession.id };
     });
 
     if (!rotated) {
@@ -317,11 +322,32 @@ export class AuthService {
     const refreshToken = this.tokenService.createOpaqueToken();
     const tokenHash = this.tokenService.hashOpaqueToken(refreshToken);
     const expiresAt = this.tokenService.getRefreshExpiration();
-    const session = await this.prisma.authSession.create({
-      data: { userId: user.id, tokenHash, expiresAt },
+    const result = await this.prisma.$transaction(async (transaction) => {
+      const current = await this.lockCurrentCredential(transaction, user);
+      if (!current) throw this.invalidCredentials();
+      const session = await transaction.authSession.create({
+        data: { userId: current.id, tokenHash, expiresAt },
+      });
+      return { user: current, sessionId: session.id };
     });
 
-    return this.buildAuthResult(user, session.id, refreshToken, expiresAt);
+    return this.buildAuthResult(result.user, result.sessionId, refreshToken, expiresAt);
+  }
+
+  private async lockCurrentCredential(
+    transaction: Prisma.TransactionClient,
+    verified: User,
+  ): Promise<User | null> {
+    await transaction.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${verified.id}::uuid FOR UPDATE`;
+    const current = await transaction.user.findUnique({ where: { id: verified.id } });
+    if (
+      !current ||
+      current.status !== UserStatus.ACTIVE ||
+      current.passwordHash !== verified.passwordHash ||
+      current.tokenVersion !== verified.tokenVersion
+    )
+      return null;
+    return current;
   }
 
   private async buildAuthResult(

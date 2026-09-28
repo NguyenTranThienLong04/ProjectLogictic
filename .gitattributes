@@ -1,5 +1,7 @@
 # Prisma hashes exact bytes. Preserve the canonical SQL bytes across platforms.
 backend/prisma/migrations/** -text
+# Dataset checksum uses the exact LF bytes stored in Git on every platform.
+backend/src/common/addresses/data/vietnam-admin.json text eol=lf
 *.sh text eol=lf
 Dockerfile text eol=lf
 *.yml text eol=lf

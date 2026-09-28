@@ -78,6 +78,87 @@ function transaction(updateCount = 1, latest: ShippingFeeTransaction | null = nu
 describe('ShippingFeesService', () => {
   const service = new ShippingFeesService({} as PrismaService);
 
+  function fulfilled(status: ShippingFeeTransactionStatus) {
+    return fee({
+      status,
+      collectedAmount: 35_000,
+      collectedByDriverId: driverId,
+      collectedAt,
+      ...(status !== ShippingFeeTransactionStatus.COLLECTED
+        ? {
+            remittedAmount: 35_000,
+            remittedByDriverId: driverId,
+            remittedAt: collectedAt,
+          }
+        : {}),
+      ...(status === ShippingFeeTransactionStatus.SETTLED
+        ? {
+            settledById: 'admin',
+            settledAt: collectedAt,
+          }
+        : {}),
+    });
+  }
+
+  it.each(['COLLECTED', 'REMITTED', 'SETTLED'] as const)(
+    'accepts valid %s evidence at delivery and on collection retry without ledger writes',
+    async (status) => {
+      const collected = fulfilled(status);
+      const tx = transaction();
+      const delivery = { ...input(collected), point: 'DELIVERY' as const, amount: undefined };
+      await expect(service.collectAt(tx as never, delivery)).resolves.toBe(collected);
+      await expect(service.collectAt(tx as never, delivery)).resolves.toBe(collected);
+      await expect(service.collectAt(tx as never, input(collected))).resolves.toBe(collected);
+      const receiver = { ...collected, payer: ShippingFeePayer.RECEIVER };
+      await expect(
+        service.collectAt(tx as never, { ...input(receiver), point: 'DELIVERY' }),
+      ).resolves.toBe(receiver);
+      await expect(
+        service.collectAt(tx as never, { ...input(receiver), point: 'DELIVERY', amount: 1 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(tx.shippingFeeTransaction.updateMany).not.toHaveBeenCalled();
+      expect(tx.auditLog.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['PENDING', 'PAYMENT_PENDING', 'CANCELLED', 'DISPUTED'] as const)(
+    'blocks sender delivery for %s even if stale collection fields exist',
+    async (status) => {
+      const tx = transaction();
+      await expect(
+        service.collectAt(tx as never, {
+          ...input({ ...fulfilled('COLLECTED'), status }),
+          point: 'DELIVERY',
+          amount: undefined,
+        }),
+      ).rejects.toMatchObject({ response: { code: 'SHIPPING_FEE_NOT_COLLECTED' } });
+      expect(tx.shippingFeeTransaction.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { status: 'COLLECTED', collectedAmount: 1 },
+    { status: 'COLLECTED', collectedAt: null },
+    { status: 'COLLECTED', collectedByDriverId: null },
+    { status: 'REMITTED', remittedAmount: 1 },
+    { status: 'REMITTED', remittedByDriverId: 'wrong-driver' },
+    { status: 'SETTLED', settledAt: null },
+    { status: 'SETTLED', settledById: null },
+    { status: 'PAID', paidAmount: 1 },
+  ] as Partial<ShippingFeeTransaction>[])(
+    'blocks invalid payment evidence %j',
+    async (overrides) => {
+      const invalid = { ...fulfilled(overrides.status!), ...overrides };
+      await expect(
+        service.collectAt(transaction() as never, {
+          ...input(invalid),
+          point: 'DELIVERY',
+          amount: undefined,
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    },
+  );
+
   it('snapshots the exact shipment pricing total in a separate pending transaction', async () => {
     const tx = transaction();
 

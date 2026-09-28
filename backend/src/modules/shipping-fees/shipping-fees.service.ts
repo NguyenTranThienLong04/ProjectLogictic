@@ -73,16 +73,8 @@ export class ShippingFeesService {
           message: `Shipping fee is collected at ${duePoint.toLowerCase()}, not ${input.point.toLowerCase()}`,
         });
       }
-      if (
-        input.point === 'DELIVERY' &&
-        fee.payer === ShippingFeePayer.SENDER &&
-        fee.status !== ShippingFeeTransactionStatus.COLLECTED &&
-        fee.status !== ShippingFeeTransactionStatus.PAID
-      ) {
-        throw new ConflictException({
-          code: 'SHIPPING_FEE_NOT_COLLECTED',
-          message: 'Sender-paid shipping fee must be collected at pickup before delivery',
-        });
+      if (input.point === 'DELIVERY' && fee.payer === ShippingFeePayer.SENDER) {
+        this.assertObligationSatisfied(fee);
       }
       return fee;
     }
@@ -100,12 +92,17 @@ export class ShippingFeesService {
           message: 'Shipping fee was already paid online and must not be collected again',
         });
       }
-      this.assertPaidIntegrity(fee);
+      this.assertObligationSatisfied(fee);
       return fee;
     }
 
     this.assertExactAmount(input.amount, fee.expectedAmount);
-    if (fee.status === ShippingFeeTransactionStatus.COLLECTED) {
+    if (
+      fee.status === ShippingFeeTransactionStatus.COLLECTED ||
+      fee.status === ShippingFeeTransactionStatus.REMITTED ||
+      fee.status === ShippingFeeTransactionStatus.SETTLED
+    ) {
+      this.assertObligationSatisfied(fee);
       this.assertIdempotentCollection(fee, input.driver.id, input.amount!);
       return fee;
     }
@@ -135,7 +132,13 @@ export class ShippingFeesService {
     });
     if (update.count !== 1) {
       const latest = await tx.shippingFeeTransaction.findUnique({ where: { id: fee.id } });
-      if (latest?.status === ShippingFeeTransactionStatus.COLLECTED) {
+      if (
+        latest &&
+        (latest.status === ShippingFeeTransactionStatus.COLLECTED ||
+          latest.status === ShippingFeeTransactionStatus.REMITTED ||
+          latest.status === ShippingFeeTransactionStatus.SETTLED)
+      ) {
+        this.assertObligationSatisfied(latest);
         this.assertIdempotentCollection(latest, input.driver.id, input.amount!);
         return latest;
       }
@@ -710,6 +713,38 @@ export class ShippingFeesService {
         code: 'SHIPPING_FEE_ADMIN_REQUIRED',
         message: 'Only an Admin can reconcile shipping fees',
       });
+    }
+  }
+
+  // Reconciliation advances custody of money; it does not undo the payer's payment.
+  // Every delivery and collection retry uses this single evidence policy.
+  private assertObligationSatisfied(fee: ShippingFeeTransaction): void {
+    switch (fee.status) {
+      case ShippingFeeTransactionStatus.PAID:
+        this.assertPaidIntegrity(fee);
+        return;
+      case ShippingFeeTransactionStatus.COLLECTED:
+        this.assertCollectedIntegrity(fee);
+        return;
+      case ShippingFeeTransactionStatus.REMITTED:
+      case ShippingFeeTransactionStatus.SETTLED:
+        this.assertRemittedIntegrity(fee);
+        if (
+          fee.remittedByDriverId !== fee.collectedByDriverId ||
+          (fee.status === ShippingFeeTransactionStatus.SETTLED &&
+            (!fee.settledAt || !fee.settledById))
+        ) {
+          throw new ConflictException({
+            code: 'SHIPPING_FEE_STATE_INVALID',
+            message: 'Shipping fee reconciliation evidence is inconsistent',
+          });
+        }
+        return;
+      default:
+        throw new ConflictException({
+          code: 'SHIPPING_FEE_NOT_COLLECTED',
+          message: 'Shipping fee requires valid collection or payment before delivery',
+        });
     }
   }
 
