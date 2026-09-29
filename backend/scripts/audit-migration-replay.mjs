@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import pg from 'pg';
 
@@ -15,7 +16,8 @@ if (urls[0] === urls[1]) throw new Error('Replay and shadow must be different da
 const directory = new URL('../prisma/migrations/', import.meta.url);
 const names = (await readdir(directory, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-if (names.length !== 25) throw new Error(`Expected 25 migrations, found ${names.length}`);
+const manifest = JSON.parse(await readFile(new URL('../prisma/migrations.manifest.json', import.meta.url), 'utf8'));
+assert.deepEqual(names, Object.keys(manifest.migrations).sort(), 'Replay migrations must match the canonical manifest');
 const schemas = [];
 for (const [index, connectionString] of urls.entries()) {
   const client = new pg.Client({ connectionString, connectionTimeoutMillis: 10000 });
@@ -46,5 +48,5 @@ for (const [index, connectionString] of urls.entries()) {
   }
 }
 if (schemas[0] !== schemas[1]) throw new Error('Replay/shadow catalog mismatch');
-console.log('PASS: 25 SQL migrations replayed independently twice; columns, constraints, indexes and enums match.');
+console.log(`PASS: ${names.length} SQL migrations replayed independently twice; columns, constraints, indexes and enums match.`);
 console.log('This SQL replay does not replace Prisma migrate deploy/status or Prisma schema drift validation.');
