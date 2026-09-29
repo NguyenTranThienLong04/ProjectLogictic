@@ -251,11 +251,14 @@ describe('Phase 7 COD concurrency and settlement (e2e)', () => {
     }
 
     expect(await prisma.cODTransaction.count({ where: { shipmentId: shipment.id } })).toBe(1);
-    expect(
-      await prisma.auditLog.count({
-        where: { action: 'DELIVERY_COMPLETE', entityId: deliveryAttempt.id },
-      }),
-    ).toBe(1);
+    const deliveryAudits = await prisma.auditLog.findMany({
+      where: { action: 'DELIVERY_COMPLETE', entityType: 'Shipment', entityId: shipment.id },
+    });
+    expect(deliveryAudits).toHaveLength(1);
+    expect(deliveryAudits[0]?.metadata).toMatchObject({
+      attemptId: deliveryAttempt.id,
+      assignmentId: assignment.id,
+    });
     const cod = await prisma.cODTransaction.findUniqueOrThrow({
       where: { shipmentId: shipment.id },
     });

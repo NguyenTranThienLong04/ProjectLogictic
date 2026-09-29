@@ -206,16 +206,22 @@ describe.each([
     if (!redis.isAvailable()) {
       throw new Error('Full operational E2E requires the configured development Redis instance');
     }
-    // Each parameterized journey has its own login quota in the disposable P0 runner.
+    // Each parameterized journey has its own login quota in the disposable runners.
     // Keep production throttling intact; never clear counters on another target.
-    if (process.env.P0_REGRESSION === 'true') {
+    if (process.env.P0_REGRESSION === 'true' || process.env.CI === 'true') {
       const url = new URL(process.env.DATABASE_URL!);
-      if (
-        url.hostname !== '127.0.0.1' ||
-        !/^\/p0_regression_\d+$/.test(url.pathname) ||
-        process.env.REDIS_URL !== 'redis://127.0.0.1:56379/2'
-      ) {
-        throw new Error('P0 rate isolation requires the dedicated localhost database and Redis /2');
+      const localTarget =
+        process.env.P0_REGRESSION === 'true' &&
+        /^\/p0_regression_\d+$/.test(url.pathname) &&
+        process.env.REDIS_URL === 'redis://127.0.0.1:56379/2';
+      const ciTarget =
+        process.env.CI === 'true' &&
+        url.pathname === '/i1_e2e' &&
+        process.env.REDIS_URL === 'redis://127.0.0.1:56379/0';
+      if (url.hostname !== '127.0.0.1' || url.port !== '55432' || (!localTarget && !ciTarget)) {
+        throw new Error(
+          'Rate isolation requires the dedicated localhost P0 or CI database and Redis',
+        );
       }
       const keys = await redis.getClient().keys('rate-limit:*');
       if (keys.length) await redis.getClient().del(...keys);

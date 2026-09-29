@@ -32,11 +32,14 @@ describe('P0 credential/session concurrency on real PostgreSQL', () => {
 
   beforeAll(async () => {
     const url = new URL(process.env.DATABASE_URL ?? 'http://invalid');
+    const ciDatabase =
+      process.env.CI === 'true' && url.hostname === '127.0.0.1' && url.pathname === '/i1_e2e';
     if (
       !['127.0.0.1', 'localhost'].includes(url.hostname) ||
-      !/^\/p0_regression_\d+$/.test(url.pathname)
+      url.port !== '55432' ||
+      (!/^\/p0_regression_\d+$/.test(url.pathname) && !ciDatabase)
     ) {
-      throw new Error('Requires isolated localhost p0_regression_<timestamp> database');
+      throw new Error('Requires isolated localhost P0 or CI E2E database on port 55432');
     }
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(RedisService)
