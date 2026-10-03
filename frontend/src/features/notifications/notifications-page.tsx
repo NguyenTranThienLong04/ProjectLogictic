@@ -10,6 +10,8 @@ import { Pagination } from '../../components/ui/pagination';
 import { getApiErrorMessage } from '../../services/api-error';
 import { dateTimeFormatter } from '../../utils/format';
 import { AccountLayout } from '../auth/components/account-layout';
+import { useAuth } from '../auth/auth-context';
+import { useOpenNotification } from './use-open-notification';
 import {
   listNotifications,
   markAllNotificationsRead,
@@ -19,6 +21,8 @@ import {
 const pageSize = 12;
 
 export function NotificationsPage() {
+  const { user } = useAuth();
+  const openNotification = useOpenNotification();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -42,7 +46,9 @@ export function NotificationsPage() {
       await refresh();
     },
   });
-  const mutationError = markRead.isError
+  const mutationError = openNotification.isError
+    ? getApiErrorMessage(openNotification.error)
+    : markRead.isError
     ? getApiErrorMessage(markRead.error)
     : markAllRead.isError
       ? getApiErrorMessage(markAllRead.error)
@@ -148,7 +154,16 @@ export function NotificationsPage() {
                         {dateTimeFormatter.format(new Date(item.createdAt))}
                       </time>
                     </div>
-                    <h2 className="mt-3 text-base font-semibold text-ink sm:text-lg">{item.title}</h2>
+                    <h2 className="mt-3 text-base font-semibold text-ink sm:text-lg">
+                      {user?.role === 'DRIVER' ? (
+                        <button
+                          className="focus-ring min-h-12 cursor-pointer rounded-control text-left text-primary hover:underline disabled:opacity-45"
+                          disabled={openNotification.isPending || markRead.isPending || markAllRead.isPending}
+                          onClick={() => openNotification.mutate(item)}
+                          type="button"
+                        >{item.title}</button>
+                      ) : item.title}
+                    </h2>
                     <p className="mt-1 leading-7 text-muted-foreground">{item.message}</p>
                   </div>
                   {!item.readAt ? (

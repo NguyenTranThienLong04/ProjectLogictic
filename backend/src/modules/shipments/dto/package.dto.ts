@@ -1,8 +1,9 @@
+import { PackageDimensionsDto } from '../../../common/dto/package-dimensions.dto.js';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNumber, IsString, Length, Matches, Max, Min } from 'class-validator';
+import { IsInt, IsString, Length, Matches, Max, Min } from 'class-validator';
 
-export class PackageDto {
+export class PackageDto extends PackageDimensionsDto {
   @ApiProperty({ example: 'Quần áo', minLength: 2, maxLength: 200 })
   @IsString()
   @Length(2, 200)
@@ -21,25 +22,4 @@ export class PackageDto {
   @Min(1)
   @Max(100_000)
   weightGrams!: number;
-
-  @ApiProperty({ example: 20, minimum: 1, maximum: 300 })
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 1 })
-  @Min(1)
-  @Max(300)
-  lengthCm!: number;
-
-  @ApiProperty({ example: 15, minimum: 1, maximum: 300 })
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 1 })
-  @Min(1)
-  @Max(300)
-  widthCm!: number;
-
-  @ApiProperty({ example: 10, minimum: 1, maximum: 300 })
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 1 })
-  @Min(1)
-  @Max(300)
-  heightCm!: number;
 }

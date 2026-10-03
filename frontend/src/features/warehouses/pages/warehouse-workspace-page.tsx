@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/button';
 import { DataTable } from '../../../components/ui/data-table';
@@ -18,6 +19,8 @@ import { getApiErrorMessage } from '../../../services/api-error';
 import { formatCurrency, formatDateTime, formatWeight } from '../../../utils/format';
 import { useAuth } from '../../auth/auth-context';
 import { AccountLayout } from '../../auth/components/account-layout';
+import { dimensionInputError } from '../../shipments/package-dimensions';
+import { transferBlockReason, type TransferContext } from '../transfer-form';
 import {
   checkInShipment,
   createTransfer,
@@ -51,7 +54,7 @@ export function WarehouseWorkspacePage() {
   // Modals state
   const [checkInModalShipment, setCheckInModalShipment] = useState<WarehouseShipment | null>(null);
   const [sortingModalShipment, setSortingModalShipment] = useState<WarehouseShipment | null>(null);
-  const [transferModalShipment, setTransferModalShipment] = useState<WarehouseShipment | null>(
+  const [transferSelection, setTransferSelection] = useState<{ id: string; trackingCode: string; warehouseId: string } | null>(
     null,
   );
   const [dispatchModalTransfer, setDispatchModalTransfer] = useState<WarehouseTransfer | null>(
@@ -70,6 +73,7 @@ export function WarehouseWorkspacePage() {
   const [sortingDestWh, setSortingDestWh] = useState('');
   const [transferNote, setTransferNote] = useState('');
   const [transferClientRequestId, setTransferClientRequestId] = useState('');
+  const [transferReviewMessage, setTransferReviewMessage] = useState('');
 
   const [receiveNote, setReceiveNote] = useState('');
   const [receiveWeight, setReceiveWeight] = useState('');
@@ -118,6 +122,29 @@ export function WarehouseWorkspacePage() {
     enabled: Boolean(activeWarehouseId),
   });
 
+  const transferContext = useQuery({
+    queryKey: ['warehouse-transfer-context', transferSelection?.warehouseId, transferSelection?.id],
+    queryFn: async (): Promise<TransferContext> => {
+      if (!transferSelection) throw new Error('No transfer selected');
+      const [inventory, transfers] = await Promise.all([
+        listWarehouseShipments(transferSelection.warehouseId, { search: transferSelection.trackingCode }),
+        listTransfers(transferSelection.warehouseId, 'outbound'),
+      ]);
+      return {
+        shipment: inventory.items.find((item) => item.id === transferSelection.id) ?? null,
+        activeTransfer: transfers.find((item) => item.shipmentId === transferSelection.id &&
+          (item.status === 'PENDING' || item.status === 'IN_TRANSIT')),
+      };
+    },
+    enabled: Boolean(transferSelection),
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const transferModalShipment = transferContext.data?.shipment;
+  const transferBlocked = transferSelection?.warehouseId !== activeWarehouseId
+    ? 'Kho đang vận hành đã thay đổi. Hãy đóng hộp thoại và chọn lại vận đơn.'
+    : transferContext.data ? transferBlockReason(transferContext.data, activeWarehouseId) : undefined;
+
   // Mutations
   const lookupMutation = useMutation({
     mutationFn: (trackingCode: string) => lookupCheckInShipment(activeWarehouseId, trackingCode),
@@ -163,6 +190,7 @@ export function WarehouseWorkspacePage() {
           : `Đã xác nhận kho đích cho vận đơn ${shipment.trackingCode}.`,
       );
       await queryClient.invalidateQueries({ queryKey: ['warehouse-inventory', activeWarehouseId] });
+      await queryClient.invalidateQueries({ queryKey: ['warehouse-transfer-context', activeWarehouseId] });
     },
   });
 
@@ -172,9 +200,14 @@ export function WarehouseWorkspacePage() {
       toWarehouseId: string;
       note?: string;
       clientRequestId: string;
-    }) => createTransfer(activeWarehouseId, input),
+      warehouseId: string;
+    }) => createTransfer(input.warehouseId, {
+      shipmentId: input.shipmentId, toWarehouseId: input.toWarehouseId,
+      note: input.note, clientRequestId: input.clientRequestId,
+    }),
+    onError: async () => { await transferContext.refetch(); },
     onSuccess: async (transfer) => {
-      setTransferModalShipment(null);
+      setTransferSelection(null);
       setTransferNote('');
       setTransferClientRequestId('');
       setActiveTab('outbound_transfers');
@@ -245,6 +278,7 @@ export function WarehouseWorkspacePage() {
   };
 
   const openCheckInModal = (shipment: WarehouseShipment) => {
+    checkInMutation.reset();
     setCheckInModalShipment(shipment);
     setCheckInWeight(String(shipment.packageSnapshot?.weightGrams || ''));
     setCheckInLength(String(shipment.packageSnapshot?.lengthCm || ''));
@@ -263,7 +297,9 @@ export function WarehouseWorkspacePage() {
   };
 
   const openTransferModal = (shipment: WarehouseShipment) => {
-    setTransferModalShipment(shipment);
+    transferMutation.reset();
+    setTransferReviewMessage('');
+    setTransferSelection({ id: shipment.id, trackingCode: shipment.trackingCode, warehouseId: activeWarehouseId });
     setTransferNote('');
     setTransferClientRequestId(crypto.randomUUID());
   };
@@ -274,11 +310,38 @@ export function WarehouseWorkspacePage() {
     setReceiveWeight('');
   };
 
-  const packageVerificationComplete =
-    packageVerified &&
-    [checkInWeight, checkInLength, checkInWidth, checkInHeight].every(
-      (value) => Number.isFinite(Number(value)) && Number(value) > 0,
-    );
+  const checkInErrors = {
+    weight: Number.isInteger(Number(checkInWeight)) && Number(checkInWeight) >= 1
+      ? undefined : 'Trọng lượng (gram) phải là số nguyên lớn hơn 0',
+    length: dimensionInputError('lengthCm', checkInLength),
+    width: dimensionInputError('widthCm', checkInWidth),
+    height: dimensionInputError('heightCm', checkInHeight),
+  };
+  const packageVerificationComplete = packageVerified && Object.values(checkInErrors).every((error) => !error);
+
+  const submitTransfer = async () => {
+    if (!transferSelection || !transferModalShipment || transferBlocked || transferContext.isFetching || transferMutation.isPending) return;
+    const reviewedDestination = transferModalShipment.destinationWarehouseId;
+    setTransferReviewMessage('');
+    const latest = await transferContext.refetch();
+    if (latest.isError || !latest.data || transferBlockReason(latest.data, transferSelection.warehouseId)) return;
+    const shipment = latest.data.shipment!;
+    if (shipment.destinationWarehouseId !== reviewedDestination) {
+      setTransferReviewMessage('Kho đích đã thay đổi. Vui lòng kiểm tra kho đi → kho đến mới trước khi tạo transfer.');
+      return;
+    }
+    transferMutation.mutate({
+      warehouseId: transferSelection.warehouseId,
+      shipmentId: shipment.id, toWarehouseId: shipment.destinationWarehouseId!,
+      note: transferNote || undefined, clientRequestId: transferClientRequestId,
+    });
+  };
+
+  const transferErrorCode = axios.isAxiosError<{ code?: string }>(transferMutation.error)
+    ? transferMutation.error.response?.data.code : undefined;
+  const transferError = transferErrorCode === 'TRANSFER_DESTINATION_MISMATCH'
+    ? 'Kho đích vừa thay đổi. Hãy kiểm tra kho đến mới trước khi tạo lại transfer.'
+    : transferMutation.isError ? getApiErrorMessage(transferMutation.error) : undefined;
 
   if (user?.role === 'WAREHOUSE_STAFF' && staffProfile.isPending) {
     return (
@@ -732,6 +795,11 @@ export function WarehouseWorkspacePage() {
                             Tạo transfer
                           </Button>
                         ) : null}
+                        {shipment.status === 'AT_ORIGIN_WAREHOUSE' && !shipment.destinationWarehouseId ? (
+                          <span className="self-center text-sm text-muted-foreground">
+                            Cần Phân loại và xác nhận kho đích trước khi tạo transfer.
+                          </span>
+                        ) : null}
                         {activeShipmentTransfer?.status === 'PENDING' ? (
                           <span className="self-center text-sm font-medium text-muted-foreground">
                             Đã tạo {activeShipmentTransfer.transferCode}
@@ -1088,7 +1156,9 @@ export function WarehouseWorkspacePage() {
 
               <FormField
                 id="ci-weight"
-                inputMode="decimal"
+                error={checkInErrors.weight}
+                inputMode="numeric"
+                step="1"
                 label="Trọng lượng thực tế sau khi cân (gram)"
                 min="1"
                 placeholder="2000"
@@ -1100,6 +1170,10 @@ export function WarehouseWorkspacePage() {
               <div className="grid gap-4 sm:grid-cols-3">
                 <FormField
                   id="ci-length"
+                  error={checkInErrors.length}
+                  helperText="1–300 cm, tối đa 1 chữ số thập phân."
+                  max="300"
+                  step="0.1"
                   inputMode="decimal"
                   label="Dài (cm)"
                   min="1"
@@ -1109,6 +1183,10 @@ export function WarehouseWorkspacePage() {
                 />
                 <FormField
                   id="ci-width"
+                  error={checkInErrors.width}
+                  helperText="1–300 cm, tối đa 1 chữ số thập phân."
+                  max="300"
+                  step="0.1"
                   inputMode="decimal"
                   label="Rộng (cm)"
                   min="1"
@@ -1118,6 +1196,10 @@ export function WarehouseWorkspacePage() {
                 />
                 <FormField
                   id="ci-height"
+                  error={checkInErrors.height}
+                  helperText="1–300 cm, tối đa 1 chữ số thập phân."
+                  max="300"
+                  step="0.1"
                   inputMode="decimal"
                   label="Cao (cm)"
                   min="1"
@@ -1222,49 +1304,43 @@ export function WarehouseWorkspacePage() {
         ) : null}
 
         {/* Modal: Create Transfer */}
-        {transferModalShipment ? (
+        {transferSelection ? (
           <Modal
             description="Create tạo bản ghi chờ xuất. Kiện chỉ rời inventory sau khi Dispatch."
             footer={
               <>
-                <Button variant="secondary" onClick={() => setTransferModalShipment(null)}>
+                <Button disabled={transferMutation.isPending || transferContext.isFetching} variant="secondary" onClick={() => setTransferSelection(null)}>
                   Hủy
                 </Button>
                 <Button
                   disabled={
-                    !transferModalShipment.destinationWarehouseId || !transferClientRequestId
+                    !transferModalShipment || !transferClientRequestId || Boolean(transferBlocked) ||
+                    transferContext.isFetching || transferContext.isError
                   }
                   loading={transferMutation.isPending}
-                  onClick={() =>
-                    transferMutation.mutate({
-                      shipmentId: transferModalShipment.id,
-                      toWarehouseId: transferModalShipment.destinationWarehouseId || '',
-                      note: transferNote || undefined,
-                      clientRequestId: transferClientRequestId,
-                    })
-                  }
+                  onClick={() => void submitTransfer()}
                 >
                   Tạo transfer chờ xuất
                 </Button>
               </>
             }
-            onClose={() => setTransferModalShipment(null)}
+            onClose={() => { if (!transferMutation.isPending && !transferContext.isFetching) setTransferSelection(null); }}
             open
-            title={`Tạo chuyến liên kho — ${transferModalShipment.trackingCode}`}
+            title={`Tạo chuyến liên kho — ${transferSelection.trackingCode}`}
           >
             <div className="space-y-5">
-              <ErrorSummary
-                message={
-                  transferMutation.isError ? getApiErrorMessage(transferMutation.error) : undefined
-                }
-              />
+              <ErrorSummary message={transferError} />
+              <ErrorSummary message={transferBlocked || transferReviewMessage} />
+              {transferContext.isFetching ? <LoadingState label="Đang kiểm tra kho đích hiện tại…" /> : null}
+              {transferContext.isError ? <ErrorState title="Chưa xác minh được kho đích" message="Không thể tải dữ liệu mới nhất. Vui lòng thử lại trước khi tạo transfer." onRetry={() => void transferContext.refetch()} /> : null}
 
               <div className="rounded-control border border-border bg-surface-subtle p-4 text-sm">
                 <p className="text-muted-foreground">Kho đi → kho đến đã xác nhận</p>
                 <p className="mt-1 font-semibold text-ink">
                   {activeWarehouse?.code || '—'} · {activeWarehouse?.name || '—'} →{' '}
-                  {transferModalShipment.destinationWarehouse?.code || '—'} ·{' '}
-                  {transferModalShipment.destinationWarehouse?.name || '—'}
+                  {transferModalShipment?.destinationWarehouse?.id === transferModalShipment?.destinationWarehouseId
+                    ? `${transferModalShipment?.destinationWarehouse?.code || '—'} · ${transferModalShipment?.destinationWarehouse?.name || '—'}`
+                    : 'Chưa xác nhận được kho đích'}
                 </p>
               </div>
 

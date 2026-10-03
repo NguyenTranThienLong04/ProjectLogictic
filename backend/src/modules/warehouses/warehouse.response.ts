@@ -9,7 +9,9 @@ import type {
 export const warehouseShipmentInclude = {
   customer: { select: { fullName: true, phone: true } },
   originWarehouse: { select: { id: true, code: true, name: true, city: true } },
-  destinationWarehouse: { select: { id: true, code: true, name: true, city: true } },
+  destinationWarehouse: {
+    select: { id: true, code: true, name: true, city: true, isActive: true },
+  },
   currentWarehouse: { select: { id: true, code: true, name: true, city: true } },
   driverAssignments: {
     where: { type: 'PICKUP', status: 'COMPLETED' },

@@ -4,6 +4,7 @@ import type { QuoteInput } from '../pricing/pricing-api';
 import type { AddressSnapshot } from './shipment-types';
 import { getConfirmedCoordinate, type LocationAddressContext } from '../addresses/address-location-model.ts';
 import { isCanonicalAddress } from '../addresses/administrative-model.ts';
+import { packageDimensionSchemas } from './package-dimensions.ts';
 
 const phonePattern = /^\+?[0-9][0-9\s-]{7,18}[0-9]$/;
 
@@ -30,9 +31,7 @@ export const shipmentFormSchema = z
     description: z.string().trim().min(2, 'Mô tả hàng hóa cần ít nhất 2 ký tự').max(200),
     packageType: z.string().trim().min(2).max(50),
     weightGrams: z.number().int().min(1, 'Khối lượng phải lớn hơn 0').max(100_000),
-    lengthCm: z.number().min(1).max(300),
-    widthCm: z.number().min(1).max(300),
-    heightCm: z.number().min(1).max(300),
+    ...packageDimensionSchemas,
     codAmount: z.number().int().min(0).max(1_000_000_000),
     shippingFeePayer: z.enum(['SENDER', 'RECEIVER'], {
       error: 'Chọn người chịu phí vận chuyển',

@@ -1,22 +1,25 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { dateTimeFormatter } from '../../utils/format';
 import { getAccessToken } from '../../services/auth-session';
 import { createOperationsSocket } from '../../services/operations-socket';
-import { listNotifications, markNotificationRead } from './notification-api';
+import { listNotifications } from './notification-api';
+import { useOpenNotification } from './use-open-notification';
+import { ErrorSummary } from '../../components/ui/error-summary';
+import { getApiErrorMessage } from '../../services/api-error';
 
 export function NotificationBell() {
   const queryClient = useQueryClient();
+  const dropdown = useRef<HTMLDetailsElement>(null);
   const [announcement, setAnnouncement] = useState('');
   const notifications = useQuery({
     queryKey: ['notifications'],
     queryFn: () => listNotifications(),
     refetchInterval: 60_000,
   });
-  const markRead = useMutation({
-    mutationFn: markNotificationRead,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  const openNotification = useOpenNotification(() => {
+    if (dropdown.current) dropdown.current.open = false;
   });
 
   useEffect(() => {
@@ -50,7 +53,7 @@ export function NotificationBell() {
       <p aria-live="polite" className="sr-only">
         {announcement}
       </p>
-      <details className="group relative">
+      <details className="group relative" ref={dropdown}>
         <summary className="focus-ring ui-transition flex min-h-11 cursor-pointer list-none items-center rounded-control border border-border bg-surface px-3 text-sm font-semibold text-primary shadow-surface transition-colors hover:border-border-strong hover:bg-primary-soft">
           Thông báo
           {notifications.data?.unreadCount ? (
@@ -66,10 +69,12 @@ export function NotificationBell() {
           <Link
             className="focus-ring ui-transition mb-1 inline-flex min-h-11 items-center rounded-control px-2 text-sm font-semibold text-primary transition-colors hover:bg-primary-soft"
             to="/notifications"
+            onClick={() => { if (dropdown.current) dropdown.current.open = false; }}
           >
             Xem tất cả thông báo
           </Link>
           <h2 className="px-2 py-2 font-semibold text-ink">Thông báo gần đây</h2>
+          <ErrorSummary message={openNotification.isError ? getApiErrorMessage(openNotification.error) : undefined} />
           {notifications.isPending ? (
             <p className="px-2 py-4 text-sm text-muted-foreground">Đang tải…</p>
           ) : notifications.isError ? (
@@ -85,10 +90,10 @@ export function NotificationBell() {
               {notifications.data.items.map((item) => (
                 <li key={item.id}>
                   <button
-                    aria-busy={markRead.isPending || undefined}
+                    aria-busy={openNotification.isPending || undefined}
                     className={`focus-ring ui-transition min-h-11 w-full cursor-pointer rounded-control border p-3 text-left transition-colors hover:border-border-strong hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-45 ${item.readAt ? 'border-transparent text-muted-foreground' : 'border-blue-100 bg-blue-50 text-ink'}`}
-                    disabled={markRead.isPending}
-                    onClick={() => !item.readAt && markRead.mutate(item.id)}
+                    disabled={openNotification.isPending}
+                    onClick={() => openNotification.mutate(item)}
                     type="button"
                   >
                     <span className="block text-sm font-semibold">{item.title}</span>

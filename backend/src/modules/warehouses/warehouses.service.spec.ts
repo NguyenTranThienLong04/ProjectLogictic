@@ -446,7 +446,7 @@ describe('WarehousesService', () => {
           packageVerified: true,
           actualWeightGrams: 1200,
           lengthCm: 20,
-          widthCm: 15,
+          widthCm: 14.8,
           heightCm: 10,
           note: 'Checked at origin',
         },
@@ -456,6 +456,18 @@ describe('WarehousesService', () => {
 
       expect(result.idempotent).toBe(false);
       expect(result.shipment.status).toBe(ShipmentStatus.AT_ORIGIN_WAREHOUSE);
+      const update = prisma.shipment.updateMany.mock.calls[0][0] as {
+        data: {
+          packageSnapshot: {
+            verifiedDimensions: { lengthCm: number; widthCm: number; heightCm: number };
+          };
+        };
+      };
+      expect(update.data.packageSnapshot.verifiedDimensions).toEqual({
+        lengthCm: 20,
+        widthCm: 14.8,
+        heightCm: 10,
+      });
     });
 
     it('rejects staff trying to check-in at another warehouse', async () => {
@@ -668,6 +680,35 @@ describe('WarehousesService', () => {
       expect(result.status).toBe(WarehouseTransferStatus.PENDING);
       expect(prisma.shipment.updateMany).not.toHaveBeenCalled();
       expect(prisma.trackingEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a stale destination before creating transfer or audit history', async () => {
+      prisma.warehouseStaffProfile.findUnique.mockResolvedValue({
+        warehouseId: 'wh-1',
+        isActive: true,
+      });
+      prisma.warehouseTransfer.findUnique.mockResolvedValue(null);
+      prisma.warehouse.findUnique.mockResolvedValue({ isActive: true });
+      prisma.shipment.findUnique.mockResolvedValue({
+        id: 'shp-1',
+        currentWarehouseId: 'wh-1',
+        destinationWarehouseId: 'wh-3',
+        status: ShipmentStatus.AT_ORIGIN_WAREHOUSE,
+      });
+      await expect(
+        service.createTransfer(
+          'wh-1',
+          {
+            shipmentId: 'shp-1',
+            toWarehouseId: 'wh-2',
+            clientRequestId: 'request-1',
+          },
+          mockStaff,
+          mockContext,
+        ),
+      ).rejects.toMatchObject({ response: { code: 'TRANSFER_DESTINATION_MISMATCH' } });
+      expect(prisma.warehouseTransfer.create).not.toHaveBeenCalled();
+      expect(prisma.auditLog.create).not.toHaveBeenCalled();
     });
 
     it('rejects transfer when origin and destination are the same', async () => {

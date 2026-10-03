@@ -132,7 +132,7 @@ export interface WarehouseShipment {
   deliverySnapshot: AddressSnapshot;
   packageSnapshot: WarehousePackageSnapshot;
   originWarehouse?: { id: string; code: string; name: string; city: string } | null;
-  destinationWarehouse?: { id: string; code: string; name: string; city: string } | null;
+  destinationWarehouse?: { id: string; code: string; name: string; city: string; isActive?: boolean } | null;
   currentWarehouse?: { id: string; code: string; name: string; city: string } | null;
 }
 
