@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
+import { resolveBuildMetadata } from '../backend/src/common/release/release-build.ts';
 
 const productionUrlKeys = ['VITE_API_URL', 'VITE_SOCKET_URL', 'VITE_API_DOCS_URL'] as const;
 
@@ -30,6 +31,7 @@ function validateProductionEnvironment(environment: Record<string, string>): voi
 export default defineConfig(({ mode }) => {
   const envDir = '..';
   const environment = loadEnv(mode, envDir, '');
+  const release = resolveBuildMetadata(process.env);
   if (mode === 'production') validateProductionEnvironment(environment);
 
   const backendPort = process.env.PORT ?? environment.PORT ?? '3000';
@@ -39,7 +41,23 @@ export default defineConfig(({ mode }) => {
 
   return {
     envDir,
-    plugins: [react(), tailwindcss()],
+    define: { __RELEASE_PROVENANCE__: JSON.stringify(release) },
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'release-provenance',
+        generateBundle() {
+          this.emitFile({
+            type: 'asset',
+            fileName: 'release.json',
+            source: `${JSON.stringify(release)}\n`,
+          });
+          if (release.commitSha === 'unknown')
+            this.warn('Release SHA source unavailable; artifact records unknown');
+        },
+      },
+    ],
     server: {
       port: 5173,
       proxy:

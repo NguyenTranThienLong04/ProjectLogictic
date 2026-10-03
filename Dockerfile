@@ -6,6 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
+RUN npm install --global "$(node -p 'require("./package.json").packageManager')" --no-audit --no-fund
 RUN npm ci
 
 FROM dependencies AS source
@@ -24,6 +25,10 @@ WORKDIR /app/backend
 ENTRYPOINT ["bash", "/app/deploy/migrate.sh"]
 
 FROM source AS build
+ARG RELEASE_SHA
+ARG GITHUB_SHA
+ARG RENDER_GIT_COMMIT
+ARG RELEASE_BUILD_TIMESTAMP
 ENV VITE_API_URL=/api/v1 VITE_SOCKET_URL=/ VITE_API_DOCS_URL="" VITE_LOCATION_MODE=REAL
 RUN npm run build
 

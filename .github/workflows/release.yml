@@ -47,6 +47,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Install the pinned workspace-aware npm resolver
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
       - name: Select immutable migration baseline
         env:
           EVENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}

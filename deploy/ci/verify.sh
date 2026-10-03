@@ -2,6 +2,8 @@
 set -euo pipefail
 [[ "$(uname -s)" == Linux ]] || { echo 'Verification requires Linux'; exit 1; }
 cd "$(dirname "$0")/../.."
+expected_npm="$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+[[ "$(npm --version)" == "$expected_npm" ]] || { echo "Verification requires npm $expected_npm for workspace security overrides"; exit 1; }
 : "${CI_DATABASE_ADMIN_URL:?Disposable localhost control database required}"
 : "${MIGRATION_BASE_REF:?Full base commit SHA required}"
 export CI=true
@@ -23,6 +25,8 @@ npm run lint
 npm run typecheck
 npm test
 node --test backend/scripts/migration-integrity.test.mjs
+node --test backend/scripts/engine-io-security.test.mjs
+node --experimental-strip-types --test deploy/release-provenance.test.mjs
 node backend/scripts/migration-integrity.mjs
 node deploy/ci/databases.mjs
 
@@ -35,7 +39,6 @@ for database in i1_e2e i1_browser i1_smoke; do
 done
 use_database i1_e2e
 node backend/scripts/audit-e2e.mjs
-npm run build
 
 # Real Prisma engine + exact applied checksums + repeat deploy + schema drift in Linux.
 use_database i1_replay
@@ -59,6 +62,10 @@ export REDIS_URL=redis://127.0.0.1:56379/1 I1_AUDIT=true
 npx playwright install --with-deps chromium
 npm run test:browser -- --retries=0
 unset I1_AUDIT
+# Nest watch used by browser tests clears dist, including immutable release metadata.
+# Build the final production artifacts only after those development servers stop.
+npm run build
+node deploy/ci/check-release-provenance.mjs
 export AUDIT_DATABASE_URL="$(database_url i1_smoke)" AUDIT_REDIS_URL=redis://127.0.0.1:56379/2
 node backend/scripts/audit-production-smoke.mjs
 npm audit --offline=false --audit-level=low

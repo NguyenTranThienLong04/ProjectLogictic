@@ -3,17 +3,20 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import dotenv from 'dotenv';
 import pg from 'pg';
-import { checkHistory } from './migration-integrity.mjs';
+import { checkCanonicalMigrationFiles, createLegacyStagingContext, inspectHistory } from './migration-integrity.mjs';
 
 // Explicit file only: never load development .env or mutate either database.
 const file = process.argv[2];
 if (!file) throw new Error('Pass the local staging env-file path explicitly');
 const environment = dotenv.parse(readFileSync(resolve(file)));
 const manifest = JSON.parse(readFileSync(new URL('../prisma/migrations.manifest.json', import.meta.url)));
+const legacyOptIn = process.argv.includes('--legacy-staging-h2-h3');
 const identity = (url) => `${url.hostname.replace('-pooler.', '.')}:${url.port || '5432'}${url.pathname}`;
 let failed = false;
 
 try {
+  await checkCanonicalMigrationFiles(manifest);
+  console.log('PASS canonical migration file bytes and provider lock');
   const urls = Object.fromEntries(['DATABASE_URL', 'DIRECT_URL', 'SHADOW_DATABASE_URL'].map((key) => {
     assert.ok(environment[key], `${key} missing`);
     const url = new URL(environment[key]);
@@ -39,20 +42,23 @@ try {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       const { rows: [database] } = await client.query('SELECT current_database() AS name');
       assert.equal(database.name, decodeURIComponent(url.pathname.slice(1)), 'Connected database differs from URL');
+      const legacyContext = legacyOptIn && key !== 'SHADOW_DATABASE_URL'
+        ? createLegacyStagingContext(urls.DIRECT_URL.href, database.name, client.connection.stream.authorized === true)
+        : null;
       const { rows: [extension] } = await client.query("SELECT EXISTS(SELECT 1 FROM pg_available_extensions WHERE name='btree_gist') AS available, EXISTS(SELECT 1 FROM pg_extension WHERE extname='btree_gist') AS installed, has_database_privilege(current_user,current_database(),'CREATE') AS can_create, EXISTS(SELECT 1 FROM pg_available_extension_versions WHERE name='btree_gist' AND trusted) AS trusted");
       assert.ok(extension.available && (extension.installed || (extension.can_create && extension.trusted)), 'btree_gist unavailable or insufficient CREATE privilege');
       const { rows: [objects] } = await client.query("SELECT count(*)::int AS count FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND c.relkind IN ('r','v','m','S','p') AND NOT EXISTS(SELECT 1 FROM pg_depend d WHERE d.classid='pg_class'::regclass AND d.objid=c.oid AND d.deptype='e')");
       const { rows: [history] } = await client.query("SELECT to_regclass('public._prisma_migrations') IS NOT NULL AS present");
-      let applied = 0;
+      let historyResult = { appliedCount: 0, legacyExceptions: [], status: 'PASS' };
       if (history.present) {
         const { rows } = await client.query('SELECT migration_name, checksum, finished_at, rolled_back_at FROM public._prisma_migrations ORDER BY started_at');
-        applied = checkHistory(manifest, rows, true);
+        historyResult = inspectHistory(manifest, rows, true, legacyContext);
       } else {
         assert.equal(objects.count, 0, 'Unmanaged nonempty database; do not migrate/reset');
       }
       if (key === 'SHADOW_DATABASE_URL') assert.equal(objects.count, 0, 'Shadow is not empty; do not reset');
       await client.query('ROLLBACK');
-      console.log(JSON.stringify({ connection: key, tlsCertificateVerified: true, database: database.name, btreeGist: extension, relationCount: objects.count, canonicalApplied: applied, readOnly: true }));
+      console.log(JSON.stringify({ connection: key, tlsCertificateVerified: true, database: database.name, btreeGist: extension, relationCount: objects.count, canonicalApplied: historyResult.appliedCount - historyResult.legacyExceptions.length, historyStatus: historyResult.status, legacyExceptions: historyResult.legacyExceptions, readOnly: true }));
     } catch (error) {
       failed = true;
       // Raw driver errors and connection strings must never reach output.

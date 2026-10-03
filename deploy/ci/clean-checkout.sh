@@ -8,6 +8,8 @@ git init -q
 git add .
 git -c user.name='I2 Local Verification' -c user.email='i2@example.test' commit -qm 'Disposable I2 verification snapshot'
 export MIGRATION_BASE_REF="$(git rev-parse HEAD)"
+# This is the exact disposable source snapshot tested below, not the host branch HEAD.
+export RELEASE_SHA="$MIGRATION_BASE_REF"
 git clone -q --no-local /app /clean-checkout
 cd /clean-checkout
 unset I2_INSTALLED_IN_IMAGE

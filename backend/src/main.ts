@@ -8,6 +8,7 @@ import cookieParser from 'cookie-parser';
 import type { Express } from 'express';
 import { structuredLog } from './common/logging/structured-log.js';
 import { ConfiguredSocketIoAdapter } from './common/realtime/configured-socket-io.adapter.js';
+import { getReleaseMetadata } from './common/release/release-metadata.js';
 
 let startupStage = 'environment/module loading';
 console.log('Starting API...');
@@ -17,6 +18,7 @@ const startupDeadline = setTimeout(() => {
 }, 60_000);
 
 async function bootstrap(): Promise<void> {
+  const release = getReleaseMetadata();
   // Import inside the guarded bootstrap so environment validation failures are caught.
   const { AppModule } = await import('./app.module.js');
   startupStage = 'Nest dependency construction';
@@ -76,6 +78,7 @@ async function bootstrap(): Promise<void> {
       environment: configService.getOrThrow<string>('NODE_ENV'),
       swaggerEnabled,
       trustProxyHops,
+      release,
     }),
     'Bootstrap',
   );

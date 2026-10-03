@@ -36,3 +36,27 @@ test('production rejects IPv6 and alternate loopback API URLs', () => {
     else process.env.VITE_API_URL = previous;
   }
 });
+
+test('build embeds the same public identity in JS and the independent release.json artifact', () => {
+  const keys = ['RELEASE_SHA', 'RENDER_GIT_COMMIT', 'GITHUB_SHA', 'RELEASE_BUILD_TIMESTAMP'];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const release = { commitSha: 'a'.repeat(40), buildTimestamp: '2026-10-03T01:00:00.000Z' };
+  try {
+    for (const key of keys) delete process.env[key];
+    process.env.RENDER_GIT_COMMIT = release.commitSha;
+    process.env.RELEASE_BUILD_TIMESTAMP = release.buildTimestamp;
+    const config = viteConfig({ command: 'build', mode: 'production' });
+    assert.deepEqual(JSON.parse(config.define.__RELEASE_PROVENANCE__), release);
+    const plugin = config.plugins.flat().find((candidate) => candidate?.name === 'release-provenance');
+    const assets = [];
+    plugin.generateBundle.call({ emitFile: (asset) => assets.push(asset) });
+    assert.equal(assets[0].fileName, 'release.json');
+    assert.deepEqual(JSON.parse(assets[0].source), release);
+    assert.deepEqual(Object.keys(release).sort(), ['buildTimestamp', 'commitSha']);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});

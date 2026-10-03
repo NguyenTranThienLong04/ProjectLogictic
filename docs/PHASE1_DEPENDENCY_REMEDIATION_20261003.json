@@ -1,0 +1,1740 @@
+{
+  "reportDate": "2026-10-03",
+  "timezone": "Asia/Saigon",
+  "scope": "Dependency remediation only; no business rules, migration SQL/history, remote configuration, reset or staging deploy",
+  "beforeLock": {
+    "originalSourceSha": "9b0ad498fa2364593472fabf714a36f8c7660549",
+    "exactSha256": "9dc36888338f455198a0dd845bc68ca0dee49d1e090d406add37cfcb3cc1caf7",
+    "exactBytesVerification": "execFileSync git show HEAD:package-lock.json Buffer SHA-256 independently matched original audit; parsed snapshot deep-equal to exact Git original",
+    "snapshotPath": "test-results/release-closure/lock-before.json",
+    "snapshotSerialization": "UTF-8 BOM/line-ending conversion in saved snapshot; snapshot byte hash differs, parsed JSON inventory is identical"
+  },
+  "finalLock": {
+    "path": "package-lock.json",
+    "sha256": "5b6aaf0778322e8780c53c07283b7438f1c20546fff98dea4ae618a80d13a0ae",
+    "revision": "current uncommitted worktree; not represented as tested commit SHA"
+  },
+  "audit": {
+    "beforeFull": {
+      "info": 0,
+      "low": 0,
+      "moderate": 5,
+      "high": 4,
+      "critical": 0,
+      "total": 9
+    },
+    "beforeProduction": {
+      "info": 0,
+      "low": 0,
+      "moderate": 5,
+      "high": 3,
+      "critical": 0,
+      "total": 8
+    },
+    "afterFull": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "afterProduction": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "remainingFindings": [],
+    "runtimeHighRemaining": false,
+    "waivers": []
+  },
+  "packageManager": {
+    "before": "npm 11.8.0 from original audit runtime",
+    "chosen": "npm 11.18.0",
+    "arborist": "9.9.0",
+    "reason": "Root overrides were lost when traversing workspace/file Link nodes; fixed forwarding/repropagation in Arborist, allowing scoped Engine.IO/YAML/brace/URI overrides to resolve without unrelated parent major upgrades",
+    "semverImpact": "npm minor toolchain update within 11.x; no runtime application dependency added",
+    "nodeEngine": "^20.17.0 || >=22.9.0; canonical Node 22 supported",
+    "primarySources": [
+      "https://github.com/npm/cli/pull/9671",
+      "https://github.com/npm/cli/pull/9673",
+      "https://raw.githubusercontent.com/npm/cli/v11.18.0/package.json",
+      "https://raw.githubusercontent.com/npm/cli/v11.18.0/workspaces/arborist/package.json"
+    ]
+  },
+  "constraints": {
+    "auditFixForceUsed": false,
+    "auditThresholdChanged": false,
+    "newStackDependencyAdded": false,
+    "unrelatedSurvivingPackageVersionsChanged": false,
+    "unchangedParents": {
+      "socket.io": "4.8.3",
+      "@nestjs/platform-socket.io": "11.2.1",
+      "@nestjs/swagger": "11.4.7"
+    },
+    "incidentalRemovals": [
+      "@nestjs/cli nested TypeScript 5.9.3 deduped to pre-existing root override TypeScript 6.0.3",
+      "Old Engine.IO location and unused nested accepts/mime-db/mime-types/negotiator copies removed by patched tree resolution",
+      "concat-stream 2.0.0 and typedarray 0.0.6 no longer required by Multer 2.4.0"
+    ]
+  },
+  "verification": {
+    "cleanInstall": "completed by root using npm 11.18.0; full Node 22/Linux release gates pending at document creation",
+    "fullReleaseGates": "recorded separately by root final release closure report; this document does not infer PASS from empty npm audit",
+    "engineRegression": "requires authenticated socket/GPS, polling-to-WebSocket upgrade and protocol-mismatch regression in controlled local/CI environment; no staging exploit run"
+  },
+  "inputHashes": [
+    {
+      "path": "test-results/release-closure/audit-before.json",
+      "sha256": "bb4d670394921b2f4fa4fd017ad3abdeb19c3ac1545c64b7c7ba5ba13fa20522"
+    },
+    {
+      "path": "test-results/release-closure/audit-after.json",
+      "sha256": "5648ad946de15b713004190f42eb7f113de39b73087b1b5e4dcdf074ad8dcf03"
+    },
+    {
+      "path": "test-results/release-closure/audit-after-production.json",
+      "sha256": "5648ad946de15b713004190f42eb7f113de39b73087b1b5e4dcdf074ad8dcf03"
+    },
+    {
+      "path": "test-results/release-closure/lock-before.json",
+      "sha256": "778bf0f8d4abb1721da976f4140fbcf657d5d6f1e8485602df769abe6608e399"
+    },
+    {
+      "path": "docs/PHASE1_RELEASE_CLOSURE_20261003_NPM.json",
+      "sha256": "6a217a380f8399e6700c2c324bff6a63912f7917781f1ef0a6f4ebaa9da95211"
+    }
+  ],
+  "versionChanges": [
+    {
+      "path": "node_modules/@eslint/eslintrc/node_modules/brace-expansion",
+      "before": "1.1.18",
+      "after": "1.1.21"
+    },
+    {
+      "path": "node_modules/@jest/reporters/node_modules/brace-expansion",
+      "before": "2.1.4",
+      "after": "2.1.7"
+    },
+    {
+      "path": "node_modules/@nestjs/cli/node_modules/typescript",
+      "before": "5.9.3",
+      "after": null
+    },
+    {
+      "path": "node_modules/@nestjs/platform-express",
+      "before": "11.2.1",
+      "after": "11.2.6"
+    },
+    {
+      "path": "node_modules/@nestjs/swagger/node_modules/js-yaml",
+      "before": "5.3.0",
+      "after": "5.4.1"
+    },
+    {
+      "path": "node_modules/axios",
+      "before": "1.19.0",
+      "after": "1.20.0"
+    },
+    {
+      "path": "node_modules/brace-expansion",
+      "before": "5.0.9",
+      "after": "5.0.12"
+    },
+    {
+      "path": "node_modules/concat-stream",
+      "before": "2.0.0",
+      "after": null
+    },
+    {
+      "path": "node_modules/engine.io",
+      "before": "6.6.9",
+      "after": null
+    },
+    {
+      "path": "node_modules/engine.io/node_modules/accepts",
+      "before": "1.3.8",
+      "after": null
+    },
+    {
+      "path": "node_modules/engine.io/node_modules/mime-db",
+      "before": "1.52.0",
+      "after": null
+    },
+    {
+      "path": "node_modules/engine.io/node_modules/mime-types",
+      "before": "2.1.35",
+      "after": null
+    },
+    {
+      "path": "node_modules/engine.io/node_modules/negotiator",
+      "before": "0.6.3",
+      "after": null
+    },
+    {
+      "path": "node_modules/fast-uri",
+      "before": "3.1.7",
+      "after": "3.1.8"
+    },
+    {
+      "path": "node_modules/fork-ts-checker-webpack-plugin/node_modules/brace-expansion",
+      "before": "1.1.18",
+      "after": "1.1.21"
+    },
+    {
+      "path": "node_modules/jest-config/node_modules/brace-expansion",
+      "before": "2.1.4",
+      "after": "2.1.7"
+    },
+    {
+      "path": "node_modules/jest-runtime/node_modules/brace-expansion",
+      "before": "2.1.4",
+      "after": "2.1.7"
+    },
+    {
+      "path": "node_modules/multer",
+      "before": "2.3.0",
+      "after": "2.4.0"
+    },
+    {
+      "path": "node_modules/nodemailer",
+      "before": "9.1.1",
+      "after": "10.0.9"
+    },
+    {
+      "path": "node_modules/test-exclude/node_modules/brace-expansion",
+      "before": "1.1.18",
+      "after": "1.1.21"
+    },
+    {
+      "path": "node_modules/typedarray",
+      "before": "0.0.6",
+      "after": null
+    },
+    {
+      "path": "node_modules/socket.io/node_modules/engine.io",
+      "before": null,
+      "after": "6.6.10"
+    }
+  ],
+  "findings": [
+    {
+      "package": "@nestjs/platform-express",
+      "severityBefore": "moderate",
+      "isDirect": true,
+      "before": [
+        {
+          "path": "node_modules/@nestjs/platform-express",
+          "version": "11.2.1",
+          "dev": false,
+          "integrity": "sha512-lbaVW94s1u8AJfgmBtdMPi16MEuFBiLrnflUIA9tZ9e5eoUsGTN7XXXRjU5kTTLgjnTCM53qgBXXGmTqmyfoQA=="
+        }
+      ],
+      "after": [
+        {
+          "path": "node_modules/@nestjs/platform-express",
+          "version": "11.2.6",
+          "dev": false,
+          "integrity": "sha512-jPypI/+aueizkYG2Bw2kg8GaNsWE7ekFBSQ/Rwet7wEdBA/+q2FA364UbDabqjlR7C3VSNHmP/JXh+8+jXyDOw=="
+        }
+      ],
+      "auditAffectedRange": "11.1.28 - 11.2.5 || 12.0.0-alpha.0 - 12.0.2",
+      "auditSuggestedFix": {
+        "name": "@nestjs/platform-express",
+        "version": "11.2.7",
+        "isSemVerMajor": false
+      },
+      "chosenVersions": [
+        "11.2.6"
+      ],
+      "minimumSafe": "11.2.6 with multer 2.4.0",
+      "semverImpact": "patch",
+      "breakingRisk": "Low: adapter patch within Nest 11; Multer API remains 2.x; parent pins patched Multer without changing unrelated Nest packages.",
+      "scope": "backend runtime direct dependency; inherited Multer finding",
+      "sourceCode": [
+        "backend/src/main.ts"
+      ],
+      "parentChange": "@nestjs/platform-express 11.2.1 -> 11.2.6; no other Nest parent upgraded",
+      "dependencyPaths": [
+        {
+          "node": "node_modules/@nestjs/platform-express",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/@nestjs/platform-express",
+              "version": "11.2.1",
+              "via": "dependencies",
+              "requires": "11.2.1"
+            }
+          ]
+        }
+      ],
+      "advisories": [
+        {
+          "ghsa": "GHSA-3pph-fpjx-jg34",
+          "cve": "CVE-2026-88932",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-3pph-fpjx-jg34",
+          "title": "multer vulnerable to Denial of Service via orphaned disk writes on aborted uploads",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=2.2.0 <2.4.0"
+          ],
+          "minimumFixedVersions": [
+            "2.4.0"
+          ],
+          "affectedCodePath": "Multer diskStorage cleanup during an aborted multipart upload; no product upload interceptor/MulterModule/diskStorage pipeline exists.",
+          "sourceIds": [
+            1239935
+          ]
+        }
+      ],
+      "status": "FIXED",
+      "waiver": null,
+      "affectedBefore": [
+        {
+          "path": "node_modules/@nestjs/platform-express",
+          "version": "11.2.1",
+          "dev": false,
+          "integrity": "sha512-lbaVW94s1u8AJfgmBtdMPi16MEuFBiLrnflUIA9tZ9e5eoUsGTN7XXXRjU5kTTLgjnTCM53qgBXXGmTqmyfoQA=="
+        }
+      ]
+    },
+    {
+      "package": "@nestjs/swagger",
+      "severityBefore": "moderate",
+      "isDirect": true,
+      "before": [
+        {
+          "path": "node_modules/@nestjs/swagger",
+          "version": "11.4.7",
+          "dev": false,
+          "integrity": "sha512-QyDYnmfP4IRucgmtQxMqzgRBdWtjFoDp8eFvvgf92+3wdLCL+Q0xOFO1948j/ntW/Wi7qT2dyck6ka8ADzPWQQ=="
+        }
+      ],
+      "after": [
+        {
+          "path": "node_modules/@nestjs/swagger",
+          "version": "11.4.7",
+          "dev": false,
+          "integrity": "sha512-QyDYnmfP4IRucgmtQxMqzgRBdWtjFoDp8eFvvgf92+3wdLCL+Q0xOFO1948j/ntW/Wi7qT2dyck6ka8ADzPWQQ=="
+        }
+      ],
+      "auditAffectedRange": "11.4.6 - 12.0.0",
+      "auditSuggestedFix": {
+        "name": "@nestjs/swagger",
+        "version": "12.0.2",
+        "isSemVerMajor": true
+      },
+      "chosenVersions": [
+        "11.4.7"
+      ],
+      "minimumSafe": "retain 11.4.7 and override nested js-yaml to 5.4.1",
+      "semverImpact": "parent unchanged; transitive minor",
+      "breakingRisk": "Low to moderate: overriding an exact nested pin needs clean-tree/build/Swagger dump verification; avoids suggested Swagger 12 major.",
+      "scope": "backend runtime direct dependency; inherited js-yaml finding",
+      "sourceCode": [
+        "backend/src/main.ts",
+        "node_modules/@nestjs/swagger/dist/swagger-module.js"
+      ],
+      "parentChange": "none",
+      "dependencyPaths": [
+        {
+          "node": "node_modules/@nestjs/swagger",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/@nestjs/swagger",
+              "version": "11.4.7",
+              "via": "dependencies",
+              "requires": "11.4.7"
+            }
+          ]
+        }
+      ],
+      "advisories": [
+        {
+          "ghsa": "GHSA-r3ph-w7gj-g6xm",
+          "cve": null,
+          "cveStatus": "No known CVE on GitHub reviewed advisory (checked 2026-10-03)",
+          "url": "https://github.com/advisories/GHSA-r3ph-w7gj-g6xm",
+          "title": "js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=5.0.0 <=5.4.0"
+          ],
+          "minimumFixedVersions": [
+            "5.4.1"
+          ],
+          "affectedCodePath": "js-yaml load/merge-key budget handling; current SwaggerModule calls dump, not parsing attacker-supplied YAML.",
+          "sourceIds": [
+            1239991
+          ]
+        }
+      ],
+      "status": "FIXED",
+      "waiver": null,
+      "affectedBefore": [
+        {
+          "path": "node_modules/@nestjs/swagger",
+          "version": "11.4.7",
+          "dev": false,
+          "integrity": "sha512-QyDYnmfP4IRucgmtQxMqzgRBdWtjFoDp8eFvvgf92+3wdLCL+Q0xOFO1948j/ntW/Wi7qT2dyck6ka8ADzPWQQ=="
+        }
+      ]
+    },
+    {
+      "package": "axios",
+      "severityBefore": "high",
+      "isDirect": true,
+      "before": [
+        {
+          "path": "node_modules/axios",
+          "version": "1.19.0",
+          "dev": false,
+          "integrity": "sha512-ht/iuYZXEjFxLH/Hkezgd7m6JKlHHXEUSneaDz8uZe1Gj5QZtCnpyDsckvAiEnT89OEbCLmnte4R4sn7P0EKFw=="
+        }
+      ],
+      "after": [
+        {
+          "path": "node_modules/axios",
+          "version": "1.20.0",
+          "dev": false,
+          "integrity": "sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg=="
+        }
+      ],
+      "auditAffectedRange": "1.0.0 - 1.19.0",
+      "auditSuggestedFix": {
+        "name": "axios",
+        "version": "1.20.0",
+        "isSemVerMajor": false
+      },
+      "chosenVersions": [
+        "1.20.0"
+      ],
+      "minimumSafe": "1.20.0 covers all 12 captured advisories",
+      "semverImpact": "minor",
+      "breakingRisk": "Low to moderate: header/method/prototype hardening may affect custom adapters or interceptors; existing auth, refresh races and HTTP client behavior require regression.",
+      "scope": "frontend browser runtime direct dependency; no backend Axios import",
+      "sourceCode": [
+        "frontend/src/services/api.ts"
+      ],
+      "parentChange": "none; frontend direct Axios pin upgraded",
+      "dependencyPaths": [
+        {
+          "node": "node_modules/axios",
+          "chain": [
+            {
+              "path": "frontend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/axios",
+              "version": "1.19.0",
+              "via": "dependencies",
+              "requires": "1.19.0"
+            }
+          ]
+        }
+      ],
+      "advisories": [
+        {
+          "ghsa": "GHSA-vh66-26gq-q6x8",
+          "cve": "CVE-2026-101908",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-vh66-26gq-q6x8",
+          "title": "Axios: Prototype pollution gadget in fetch adapter can alter outbound requests",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=1.7.0 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios fetch adapter: inherited fetchOptions may replace outbound headers; conditional on independent prototype pollution.",
+          "sourceIds": [
+            1240600
+          ]
+        },
+        {
+          "ghsa": "GHSA-9fr6-4gfg-395g",
+          "cve": "CVE-2026-101902",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-9fr6-4gfg-395g",
+          "title": "Axios: Prototype-Pollution Gadget in the Default Instance Allows Inherited Object.prototype.method to Override HTTP Method",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=1.0.0 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios default-instance request configuration can read an inherited HTTP method; browser usage is conditional on independent prototype pollution.",
+          "sourceIds": [
+            1240601
+          ]
+        },
+        {
+          "ghsa": "GHSA-c29m-xwm3-cm6r",
+          "cve": "CVE-2026-101903",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-c29m-xwm3-cm6r",
+          "title": "Axios: ReDoS in fromDataURI data: URL parser freezes the Node event loop (DoS)",
+          "severity": "high",
+          "affectedRanges": [
+            ">=1.16.1 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios Node HTTP adapter fromDataURI parser; product uses Axios only in the browser, not this Node data URI path.",
+          "sourceIds": [
+            1240603
+          ]
+        },
+        {
+          "ghsa": "GHSA-mghh-pgcx-3jjj",
+          "cve": "CVE-2026-101906",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-mghh-pgcx-3jjj",
+          "title": "Axios: ReDoS (O(N²)) in shouldBypassProxy host normalization, reachable via untrusted redirect Location",
+          "severity": "high",
+          "affectedRanges": [
+            ">=1.15.0 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios Node HTTP adapter proxy/redirect shouldBypassProxy host normalization; no product Node Axios caller.",
+          "sourceIds": [
+            1240604
+          ]
+        },
+        {
+          "ghsa": "GHSA-x97p-jq2g-jp4f",
+          "cve": "CVE-2026-101909",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-x97p-jq2g-jp4f",
+          "title": "Axios: Prototype Pollution Gadget in axios toFormData Options",
+          "severity": "high",
+          "affectedRanges": [
+            ">=1.15.1 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios toFormData option reads after independent prototype pollution; product has no custom FormData/adapter configuration.",
+          "sourceIds": [
+            1240605
+          ]
+        },
+        {
+          "ghsa": "GHSA-3pq3-5fj3-cg6v",
+          "cve": "CVE-2026-101898",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-3pq3-5fj3-cg6v",
+          "title": "Axios: HTTP/2 adapter bypasses configured DNS lookup and proxy controls",
+          "severity": "high",
+          "affectedRanges": [
+            ">=1.13.0 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios Node HTTP/2 adapter DNS/proxy controls; product does not use Axios HTTP/2.",
+          "sourceIds": [
+            1240607
+          ]
+        },
+        {
+          "ghsa": "GHSA-542g-h47m-68v8",
+          "cve": "CVE-2026-101901",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-542g-h47m-68v8",
+          "title": "Axios: Denial of Service via Unhandled 'error' Event in HTTP/2 ClientHttp2Session Initialization",
+          "severity": "high",
+          "affectedRanges": [
+            ">=1.13.0 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios Node HTTP/2 session initialization error handling; product does not use Axios HTTP/2.",
+          "sourceIds": [
+            1240608
+          ]
+        },
+        {
+          "ghsa": "GHSA-j8rh-479h-cp32",
+          "cve": "CVE-2026-101904",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-j8rh-479h-cp32",
+          "title": "Axios: Header Injection via Inherited headers After Minimal Interceptor",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=1.0.0 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios dispatchRequest header normalization after an interceptor replaces config without own headers; product interceptor mutates and returns its existing config.",
+          "sourceIds": [
+            1240626
+          ]
+        },
+        {
+          "ghsa": "GHSA-4hqw-qxg8-jxx2",
+          "cve": "CVE-2026-101900",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-4hqw-qxg8-jxx2",
+          "title": "Axios: Fetch Adapter Header Injection via Inherited FormData getHeaders",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=1.12.0 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios fetch adapter FormData getHeaders inherited-property handling; no custom FormData/adapter configuration in product.",
+          "sourceIds": [
+            1240627
+          ]
+        },
+        {
+          "ghsa": "GHSA-m8m8-qj5v-23w3",
+          "cve": "CVE-2026-101905",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-m8m8-qj5v-23w3",
+          "title": "Axios: Node HTTP adapter prototype-pollution gadget allows request socket hijack via inherited createConnection",
+          "severity": "high",
+          "affectedRanges": [
+            ">=1.15.2 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios Node HTTP adapter inherited createConnection option; no product Node Axios caller.",
+          "sourceIds": [
+            1240628
+          ]
+        },
+        {
+          "ghsa": "GHSA-44g4-m2mj-wpvx",
+          "cve": "CVE-2026-101899",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-44g4-m2mj-wpvx",
+          "title": "Axios: CIDR-form NO_PROXY entries are ignored, causing proxy exclusion bypass for internal IP ranges",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=1.15.0 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios Node HTTP proxy NO_PROXY CIDR matching; no product Node Axios caller.",
+          "sourceIds": [
+            1240629
+          ]
+        },
+        {
+          "ghsa": "GHSA-r4gj-5m52-g5wh",
+          "cve": "CVE-2026-101907",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-r4gj-5m52-g5wh",
+          "title": "Axios: maxRedirects: 0 is not enforced by the fetch adapter, allowing redirect-based SSRF",
+          "severity": "high",
+          "affectedRanges": [
+            ">=1.17.0 <1.20.0"
+          ],
+          "minimumFixedVersions": [
+            "1.20.0"
+          ],
+          "affectedCodePath": "Axios fetch adapter maxRedirects enforcement; product does not set fetch adapter or server-side Axios requests.",
+          "sourceIds": [
+            1240634
+          ]
+        }
+      ],
+      "status": "FIXED",
+      "waiver": null,
+      "affectedBefore": [
+        {
+          "path": "node_modules/axios",
+          "version": "1.19.0",
+          "dev": false,
+          "integrity": "sha512-ht/iuYZXEjFxLH/Hkezgd7m6JKlHHXEUSneaDz8uZe1Gj5QZtCnpyDsckvAiEnT89OEbCLmnte4R4sn7P0EKFw=="
+        }
+      ]
+    },
+    {
+      "package": "brace-expansion",
+      "severityBefore": "high",
+      "isDirect": false,
+      "before": [
+        {
+          "path": "node_modules/@eslint/eslintrc/node_modules/brace-expansion",
+          "version": "1.1.18",
+          "dev": true,
+          "integrity": "sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw=="
+        },
+        {
+          "path": "node_modules/@jest/reporters/node_modules/brace-expansion",
+          "version": "2.1.4",
+          "dev": true,
+          "integrity": "sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg=="
+        },
+        {
+          "path": "node_modules/brace-expansion",
+          "version": "5.0.9",
+          "dev": true,
+          "integrity": "sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg=="
+        },
+        {
+          "path": "node_modules/fork-ts-checker-webpack-plugin/node_modules/brace-expansion",
+          "version": "1.1.18",
+          "dev": true,
+          "integrity": "sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw=="
+        },
+        {
+          "path": "node_modules/jest-config/node_modules/brace-expansion",
+          "version": "2.1.4",
+          "dev": true,
+          "integrity": "sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg=="
+        },
+        {
+          "path": "node_modules/jest-runtime/node_modules/brace-expansion",
+          "version": "2.1.4",
+          "dev": true,
+          "integrity": "sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg=="
+        },
+        {
+          "path": "node_modules/test-exclude/node_modules/brace-expansion",
+          "version": "1.1.18",
+          "dev": true,
+          "integrity": "sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw=="
+        }
+      ],
+      "after": [
+        {
+          "path": "node_modules/@eslint/eslintrc/node_modules/brace-expansion",
+          "version": "1.1.21",
+          "dev": true,
+          "integrity": "sha512-9zeA+KLZNNzglF2TPKRQEDyx6Yby7daAkuy8MiPzpXPsYDWi/DRM8jmwUDxokQjYqBpv5DgPiwD4h4ZZSy1Ujw=="
+        },
+        {
+          "path": "node_modules/@jest/reporters/node_modules/brace-expansion",
+          "version": "2.1.7",
+          "dev": true,
+          "integrity": "sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g=="
+        },
+        {
+          "path": "node_modules/brace-expansion",
+          "version": "5.0.12",
+          "dev": true,
+          "integrity": "sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ=="
+        },
+        {
+          "path": "node_modules/fork-ts-checker-webpack-plugin/node_modules/brace-expansion",
+          "version": "1.1.21",
+          "dev": true,
+          "integrity": "sha512-9zeA+KLZNNzglF2TPKRQEDyx6Yby7daAkuy8MiPzpXPsYDWi/DRM8jmwUDxokQjYqBpv5DgPiwD4h4ZZSy1Ujw=="
+        },
+        {
+          "path": "node_modules/jest-config/node_modules/brace-expansion",
+          "version": "2.1.7",
+          "dev": true,
+          "integrity": "sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g=="
+        },
+        {
+          "path": "node_modules/jest-runtime/node_modules/brace-expansion",
+          "version": "2.1.7",
+          "dev": true,
+          "integrity": "sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g=="
+        },
+        {
+          "path": "node_modules/test-exclude/node_modules/brace-expansion",
+          "version": "1.1.21",
+          "dev": true,
+          "integrity": "sha512-9zeA+KLZNNzglF2TPKRQEDyx6Yby7daAkuy8MiPzpXPsYDWi/DRM8jmwUDxokQjYqBpv5DgPiwD4h4ZZSy1Ujw=="
+        }
+      ],
+      "auditAffectedRange": "<=1.1.20 || 2.0.0 - 2.1.6 || 4.0.0 - 5.0.11",
+      "auditSuggestedFix": true,
+      "chosenVersions": [
+        "1.1.21",
+        "2.1.7",
+        "5.0.12"
+      ],
+      "minimumSafe": "1.1.21 / 2.1.7 / 5.0.12 for the three installed major lines",
+      "semverImpact": "patch on each existing major line",
+      "breakingRisk": "Low: no major-line switch; test/lint/compiler glob behavior still verified by release gates.",
+      "scope": "dev-only: all seven affected lock nodes have dev=true; absent in production audit",
+      "sourceCode": [
+        "ESLint/Jest/test-exclude/fork-ts-checker/minimatch tooling; no backend/src or frontend/src direct import"
+      ],
+      "parentChange": "none; root overrides scoped by installed major",
+      "dependencyPaths": [
+        {
+          "node": "node_modules/@eslint/eslintrc/node_modules/brace-expansion",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/@eslint/eslintrc",
+              "version": "3.3.6",
+              "via": "devDependencies",
+              "requires": "3.3.6"
+            },
+            {
+              "path": "node_modules/@eslint/eslintrc/node_modules/minimatch",
+              "version": "3.1.5",
+              "via": "dependencies",
+              "requires": "^3.1.5"
+            },
+            {
+              "path": "node_modules/@eslint/eslintrc/node_modules/brace-expansion",
+              "version": "1.1.18",
+              "via": "dependencies",
+              "requires": "^1.1.7"
+            }
+          ]
+        },
+        {
+          "node": "node_modules/@jest/reporters/node_modules/brace-expansion",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/jest",
+              "version": "30.4.2",
+              "via": "devDependencies",
+              "requires": "30.4.2"
+            },
+            {
+              "path": "node_modules/@jest/core",
+              "version": "30.4.2",
+              "via": "dependencies",
+              "requires": "30.4.2"
+            },
+            {
+              "path": "node_modules/@jest/reporters",
+              "version": "30.4.1",
+              "via": "dependencies",
+              "requires": "30.4.1"
+            },
+            {
+              "path": "node_modules/@jest/reporters/node_modules/glob",
+              "version": "10.5.0",
+              "via": "dependencies",
+              "requires": "^10.5.0"
+            },
+            {
+              "path": "node_modules/@jest/reporters/node_modules/minimatch",
+              "version": "9.0.9",
+              "via": "dependencies",
+              "requires": "^9.0.4"
+            },
+            {
+              "path": "node_modules/@jest/reporters/node_modules/brace-expansion",
+              "version": "2.1.4",
+              "via": "dependencies",
+              "requires": "^2.0.2"
+            }
+          ]
+        },
+        {
+          "node": "node_modules/brace-expansion",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/eslint",
+              "version": "10.8.1",
+              "via": "devDependencies",
+              "requires": "10.8.1"
+            },
+            {
+              "path": "node_modules/minimatch",
+              "version": "10.2.6",
+              "via": "dependencies",
+              "requires": "^10.2.5"
+            },
+            {
+              "path": "node_modules/brace-expansion",
+              "version": "5.0.9",
+              "via": "dependencies",
+              "requires": "^5.0.8"
+            }
+          ]
+        },
+        {
+          "node": "node_modules/fork-ts-checker-webpack-plugin/node_modules/brace-expansion",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/@nestjs/cli",
+              "version": "11.0.24",
+              "via": "devDependencies",
+              "requires": "11.0.24"
+            },
+            {
+              "path": "node_modules/fork-ts-checker-webpack-plugin",
+              "version": "9.1.0",
+              "via": "dependencies",
+              "requires": "9.1.0"
+            },
+            {
+              "path": "node_modules/fork-ts-checker-webpack-plugin/node_modules/minimatch",
+              "version": "3.1.5",
+              "via": "dependencies",
+              "requires": "^3.0.4"
+            },
+            {
+              "path": "node_modules/fork-ts-checker-webpack-plugin/node_modules/brace-expansion",
+              "version": "1.1.18",
+              "via": "dependencies",
+              "requires": "^1.1.7"
+            }
+          ]
+        },
+        {
+          "node": "node_modules/jest-config/node_modules/brace-expansion",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/jest",
+              "version": "30.4.2",
+              "via": "devDependencies",
+              "requires": "30.4.2"
+            },
+            {
+              "path": "node_modules/@jest/core",
+              "version": "30.4.2",
+              "via": "dependencies",
+              "requires": "30.4.2"
+            },
+            {
+              "path": "node_modules/jest-config",
+              "version": "30.4.2",
+              "via": "dependencies",
+              "requires": "30.4.2"
+            },
+            {
+              "path": "node_modules/jest-config/node_modules/glob",
+              "version": "10.5.0",
+              "via": "dependencies",
+              "requires": "^10.5.0"
+            },
+            {
+              "path": "node_modules/jest-config/node_modules/minimatch",
+              "version": "9.0.9",
+              "via": "dependencies",
+              "requires": "^9.0.4"
+            },
+            {
+              "path": "node_modules/jest-config/node_modules/brace-expansion",
+              "version": "2.1.4",
+              "via": "dependencies",
+              "requires": "^2.0.2"
+            }
+          ]
+        },
+        {
+          "node": "node_modules/jest-runtime/node_modules/brace-expansion",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/jest",
+              "version": "30.4.2",
+              "via": "devDependencies",
+              "requires": "30.4.2"
+            },
+            {
+              "path": "node_modules/@jest/core",
+              "version": "30.4.2",
+              "via": "dependencies",
+              "requires": "30.4.2"
+            },
+            {
+              "path": "node_modules/jest-runtime",
+              "version": "30.4.2",
+              "via": "dependencies",
+              "requires": "30.4.2"
+            },
+            {
+              "path": "node_modules/jest-runtime/node_modules/glob",
+              "version": "10.5.0",
+              "via": "dependencies",
+              "requires": "^10.5.0"
+            },
+            {
+              "path": "node_modules/jest-runtime/node_modules/minimatch",
+              "version": "9.0.9",
+              "via": "dependencies",
+              "requires": "^9.0.4"
+            },
+            {
+              "path": "node_modules/jest-runtime/node_modules/brace-expansion",
+              "version": "2.1.4",
+              "via": "dependencies",
+              "requires": "^2.0.2"
+            }
+          ]
+        },
+        {
+          "node": "node_modules/test-exclude/node_modules/brace-expansion",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "backend/node_modules/ts-jest",
+              "version": "29.4.12",
+              "via": "devDependencies",
+              "requires": "29.4.12"
+            },
+            {
+              "path": "node_modules/@jest/transform",
+              "version": "30.4.1",
+              "via": "peerDependencies",
+              "requires": "^29.0.0 || ^30.0.0"
+            },
+            {
+              "path": "node_modules/babel-plugin-istanbul",
+              "version": "7.0.1",
+              "via": "dependencies",
+              "requires": "^7.0.1"
+            },
+            {
+              "path": "node_modules/test-exclude",
+              "version": "6.0.0",
+              "via": "dependencies",
+              "requires": "^6.0.0"
+            },
+            {
+              "path": "node_modules/test-exclude/node_modules/minimatch",
+              "version": "3.1.5",
+              "via": "dependencies",
+              "requires": "^3.0.4"
+            },
+            {
+              "path": "node_modules/test-exclude/node_modules/brace-expansion",
+              "version": "1.1.18",
+              "via": "dependencies",
+              "requires": "^1.1.7"
+            }
+          ]
+        }
+      ],
+      "advisories": [
+        {
+          "ghsa": "GHSA-q2hr-2g5m-vwhr",
+          "cve": "CVE-2026-102277",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+          "title": "brace-expansion: Quadratic-time expansion of the `{a},b}` rewrite causes CPU denial of service",
+          "severity": "moderate",
+          "affectedRanges": [
+            "<1.1.21",
+            ">=2.0.0 <2.1.7",
+            ">=4.0.0 <5.0.12"
+          ],
+          "minimumFixedVersions": [
+            "1.1.21",
+            "2.1.7",
+            "5.0.12"
+          ],
+          "affectedCodePath": "brace-expansion expansion/rewrite of brace patterns in ESLint, Jest, glob/minimatch and Nest compiler tooling.",
+          "sourceIds": [
+            1240100,
+            1240101,
+            1240103
+          ]
+        },
+        {
+          "ghsa": "GHSA-qhr7-859c-m2p7",
+          "cve": "CVE-2026-102278",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+          "title": "brace-expansion: DoS via uncontrolled recursion on nested brace groups causing stack exhaustion",
+          "severity": "high",
+          "affectedRanges": [
+            "<1.1.20",
+            ">=2.0.0 <2.1.6",
+            ">=4.0.0 <5.0.11"
+          ],
+          "minimumFixedVersions": [
+            "1.1.20",
+            "2.1.6",
+            "5.0.11"
+          ],
+          "affectedCodePath": "brace-expansion expand_ recursion on nested groups, reached via tooling minimatch/glob patterns.",
+          "sourceIds": [
+            1240104,
+            1240105,
+            1240107
+          ]
+        },
+        {
+          "ghsa": "GHSA-6j4f-fj2g-mc7p",
+          "cve": "CVE-2026-102276",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
+          "title": "brace-expansion: DoS via uncontrolled recursion in parseCommaParts causing stack exhaustion",
+          "severity": "high",
+          "affectedRanges": [
+            "<1.1.19",
+            ">=2.0.0 <2.1.5",
+            ">=4.0.0 <5.0.10"
+          ],
+          "minimumFixedVersions": [
+            "1.1.19",
+            "2.1.5",
+            "5.0.10"
+          ],
+          "affectedCodePath": "brace-expansion parseCommaParts recursion, reached via tooling minimatch/glob patterns.",
+          "sourceIds": [
+            1240108,
+            1240109,
+            1240111
+          ]
+        }
+      ],
+      "status": "FIXED",
+      "waiver": null,
+      "affectedBefore": [
+        {
+          "path": "node_modules/@eslint/eslintrc/node_modules/brace-expansion",
+          "version": "1.1.18",
+          "dev": true,
+          "integrity": "sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw=="
+        },
+        {
+          "path": "node_modules/@jest/reporters/node_modules/brace-expansion",
+          "version": "2.1.4",
+          "dev": true,
+          "integrity": "sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg=="
+        },
+        {
+          "path": "node_modules/brace-expansion",
+          "version": "5.0.9",
+          "dev": true,
+          "integrity": "sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg=="
+        },
+        {
+          "path": "node_modules/fork-ts-checker-webpack-plugin/node_modules/brace-expansion",
+          "version": "1.1.18",
+          "dev": true,
+          "integrity": "sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw=="
+        },
+        {
+          "path": "node_modules/jest-config/node_modules/brace-expansion",
+          "version": "2.1.4",
+          "dev": true,
+          "integrity": "sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg=="
+        },
+        {
+          "path": "node_modules/jest-runtime/node_modules/brace-expansion",
+          "version": "2.1.4",
+          "dev": true,
+          "integrity": "sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg=="
+        },
+        {
+          "path": "node_modules/test-exclude/node_modules/brace-expansion",
+          "version": "1.1.18",
+          "dev": true,
+          "integrity": "sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw=="
+        }
+      ]
+    },
+    {
+      "package": "engine.io",
+      "severityBefore": "high",
+      "isDirect": false,
+      "before": [
+        {
+          "path": "node_modules/engine.io",
+          "version": "6.6.9",
+          "dev": false,
+          "integrity": "sha512-clKkw4C7nJ22mGgoVcCg6V/W/TxdNyIOTr89k2ONZu81qqkddPFDF0LXcbAwhzPD8DjkiRCjzuiO6Y+fkpD4vg=="
+        }
+      ],
+      "after": [
+        {
+          "path": "node_modules/socket.io/node_modules/engine.io",
+          "version": "6.6.10",
+          "dev": false,
+          "integrity": "sha512-9/lX2bdlizlCXMHRMOIm03VBQHQYC7VvydcxtTAUJRxNW1QzM/2PMFSmr6h/lCiMHcyCP6abK+t9Q+j4vekk8Q=="
+        }
+      ],
+      "auditAffectedRange": "6.6.0 - 6.6.9",
+      "auditSuggestedFix": true,
+      "chosenVersions": [
+        "6.6.10"
+      ],
+      "minimumSafe": "6.6.10",
+      "semverImpact": "patch within Socket.IO dependency range ~6.6.0",
+      "breakingRisk": "Low: transport-upgrade hardening may reject malformed connections; auth/revocation/reconnect/polling upgrade/GPS/socket regressions required.",
+      "scope": "backend runtime reachable HIGH before fix",
+      "sourceCode": [
+        "backend/src/common/realtime/configured-socket-io.adapter.ts",
+        "backend/src/modules/notifications/notifications.gateway.ts",
+        "node_modules/socket.io/node_modules/engine.io/build/server.js"
+      ],
+      "parentChange": "none; socket.io 4.8.3 and @nestjs/platform-socket.io 11.2.1 unchanged; scoped socket.io -> engine.io override",
+      "dependencyPaths": [
+        {
+          "node": "node_modules/engine.io",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/socket.io",
+              "version": "4.8.3",
+              "via": "dependencies",
+              "requires": "4.8.3"
+            },
+            {
+              "path": "node_modules/engine.io",
+              "version": "6.6.9",
+              "via": "dependencies",
+              "requires": "~6.6.0"
+            }
+          ]
+        }
+      ],
+      "advisories": [
+        {
+          "ghsa": "GHSA-2gc4-cqfq-p2gv",
+          "cve": "CVE-2026-102599",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-2gc4-cqfq-p2gv",
+          "title": "Socket.IO: Engine.IO Protocol Revision Mismatch DoS",
+          "severity": "high",
+          "affectedRanges": [
+            ">=6.6.0 <6.6.10"
+          ],
+          "minimumFixedVersions": [
+            "6.6.10"
+          ],
+          "affectedCodePath": "Engine.IO transport polling-to-WebSocket upgrade with protocol revision mismatch before namespace auth; ConfiguredSocketIoAdapter retains default upgrades.",
+          "sourceIds": [
+            1240112
+          ]
+        }
+      ],
+      "status": "FIXED",
+      "waiver": null,
+      "affectedBefore": [
+        {
+          "path": "node_modules/engine.io",
+          "version": "6.6.9",
+          "dev": false,
+          "integrity": "sha512-clKkw4C7nJ22mGgoVcCg6V/W/TxdNyIOTr89k2ONZu81qqkddPFDF0LXcbAwhzPD8DjkiRCjzuiO6Y+fkpD4vg=="
+        }
+      ]
+    },
+    {
+      "package": "fast-uri",
+      "severityBefore": "moderate",
+      "isDirect": false,
+      "before": [
+        {
+          "path": "node_modules/fast-uri",
+          "version": "3.1.7",
+          "dev": false,
+          "integrity": "sha512-dOvZVzjdZdz7phd9v6jCbwxrBW3fK6n8Rc0CtdmM4bumzMnxywBYhuph6J819RRw/ku+rLbelwfMunktuzVVHg=="
+        }
+      ],
+      "after": [
+        {
+          "path": "node_modules/fast-uri",
+          "version": "3.1.8",
+          "dev": false,
+          "integrity": "sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg=="
+        }
+      ],
+      "auditAffectedRange": "3.0.0 - 3.1.7",
+      "auditSuggestedFix": true,
+      "chosenVersions": [
+        "3.1.8"
+      ],
+      "minimumSafe": "3.1.8",
+      "semverImpact": "patch",
+      "breakingRisk": "Low: corrected host normalization may affect unusual URI refs; generation/build/tool validation required.",
+      "scope": "transitive runtime inventory plus dev tooling; application exploitability not demonstrated, not classified dev-only",
+      "sourceCode": [
+        "node_modules/ajv/dist/runtime/uri.js",
+        "backend Prisma/tooling dependency graph; product uses class-validator/Zod"
+      ],
+      "parentChange": "none; root fast-uri@^3 override",
+      "dependencyPaths": [
+        {
+          "node": "node_modules/fast-uri",
+          "chain": [
+            {
+              "path": "frontend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/@hookform/resolvers",
+              "version": "5.9.0",
+              "via": "dependencies",
+              "requires": "5.9.0"
+            },
+            {
+              "path": "node_modules/ajv",
+              "version": "8.20.0",
+              "via": "peerDependencies",
+              "requires": "^8.12.0"
+            },
+            {
+              "path": "node_modules/fast-uri",
+              "version": "3.1.7",
+              "via": "dependencies",
+              "requires": "^3.0.1"
+            }
+          ]
+        }
+      ],
+      "advisories": [
+        {
+          "ghsa": "GHSA-hrr3-gc8f-f4qj",
+          "cve": "CVE-2026-86472",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-hrr3-gc8f-f4qj",
+          "title": "fast-uri vulnerable to inconsistent host case normalization via percent-encoded octets",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=3.0.0 <3.1.8"
+          ],
+          "minimumFixedVersions": [
+            "3.1.8"
+          ],
+          "affectedCodePath": "fast-uri host normalization for percent-encoded octets via AJV URI/$ref resolution; product validation uses class-validator and Zod, but the package exists in production inventory.",
+          "sourceIds": [
+            1240091
+          ]
+        }
+      ],
+      "status": "FIXED",
+      "waiver": null,
+      "affectedBefore": [
+        {
+          "path": "node_modules/fast-uri",
+          "version": "3.1.7",
+          "dev": false,
+          "integrity": "sha512-dOvZVzjdZdz7phd9v6jCbwxrBW3fK6n8Rc0CtdmM4bumzMnxywBYhuph6J819RRw/ku+rLbelwfMunktuzVVHg=="
+        }
+      ]
+    },
+    {
+      "package": "js-yaml",
+      "severityBefore": "moderate",
+      "isDirect": false,
+      "before": [
+        {
+          "path": "node_modules/@istanbuljs/load-nyc-config/node_modules/js-yaml",
+          "version": "3.15.2",
+          "dev": true,
+          "integrity": "sha512-6EuL879VkRA+1Cz578mKMiKvjPNEuk6+r1JaFzoSWejZmtf7xWbIyw1e3KkxlkzTIt9Taw6JBhEppG7utc1P+w=="
+        },
+        {
+          "path": "node_modules/@nestjs/swagger/node_modules/js-yaml",
+          "version": "5.3.0",
+          "dev": false,
+          "integrity": "sha512-muutsYr+e2+d3rTgUGslq5rxbBlUy3cJ61IsHag2QNDQV+7zXWjkUpmALIajhrlLlrgRUiymj6U3zUr/TMK84Q=="
+        },
+        {
+          "path": "node_modules/js-yaml",
+          "version": "4.3.2",
+          "dev": true,
+          "integrity": "sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA=="
+        }
+      ],
+      "after": [
+        {
+          "path": "node_modules/@istanbuljs/load-nyc-config/node_modules/js-yaml",
+          "version": "3.15.2",
+          "dev": true,
+          "integrity": "sha512-6EuL879VkRA+1Cz578mKMiKvjPNEuk6+r1JaFzoSWejZmtf7xWbIyw1e3KkxlkzTIt9Taw6JBhEppG7utc1P+w=="
+        },
+        {
+          "path": "node_modules/@nestjs/swagger/node_modules/js-yaml",
+          "version": "5.4.1",
+          "dev": false,
+          "integrity": "sha512-28R/k+NAjeuf7+CKlTxWZVExJGwVVLwY06DgEnOMz2gEpfNkDcD7QvyiVPT0xy0XXhU8vHsd4Ot42OOPdJG7dQ=="
+        },
+        {
+          "path": "node_modules/js-yaml",
+          "version": "4.3.2",
+          "dev": true,
+          "integrity": "sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA=="
+        }
+      ],
+      "auditAffectedRange": "5.0.0 - 5.4.0",
+      "auditSuggestedFix": {
+        "name": "@nestjs/swagger",
+        "version": "12.0.2",
+        "isSemVerMajor": true
+      },
+      "chosenVersions": [
+        "5.4.1"
+      ],
+      "minimumSafe": "5.4.1 for affected Swagger copy only",
+      "semverImpact": "minor from 5.3.0; parent unchanged",
+      "breakingRisk": "Low to moderate: exact nested pin override; current Swagger dump API preserved, build/docs-generation compatibility required.",
+      "scope": "backend transitive runtime dependency; YAML load exploit path not used by current Swagger code",
+      "sourceCode": [
+        "node_modules/@nestjs/swagger/dist/swagger-module.js",
+        "backend/src/main.ts"
+      ],
+      "parentChange": "none; @nestjs/swagger 11.4.7 unchanged; scoped js-yaml 5.4.1 override; existing 3.x/4.x overrides preserved",
+      "dependencyPaths": [
+        {
+          "node": "node_modules/@nestjs/swagger/node_modules/js-yaml",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/@nestjs/swagger",
+              "version": "11.4.7",
+              "via": "dependencies",
+              "requires": "11.4.7"
+            },
+            {
+              "path": "node_modules/@nestjs/swagger/node_modules/js-yaml",
+              "version": "5.3.0",
+              "via": "dependencies",
+              "requires": "5.3.0"
+            }
+          ]
+        }
+      ],
+      "advisories": [
+        {
+          "ghsa": "GHSA-r3ph-w7gj-g6xm",
+          "cve": null,
+          "cveStatus": "No known CVE on GitHub reviewed advisory (checked 2026-10-03)",
+          "url": "https://github.com/advisories/GHSA-r3ph-w7gj-g6xm",
+          "title": "js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=5.0.0 <=5.4.0"
+          ],
+          "minimumFixedVersions": [
+            "5.4.1"
+          ],
+          "affectedCodePath": "js-yaml load/merge-key budget handling; current SwaggerModule calls dump, not parsing attacker-supplied YAML.",
+          "sourceIds": [
+            1239991
+          ]
+        }
+      ],
+      "status": "FIXED",
+      "waiver": null,
+      "affectedBefore": [
+        {
+          "path": "node_modules/@nestjs/swagger/node_modules/js-yaml",
+          "version": "5.3.0",
+          "dev": false,
+          "integrity": "sha512-muutsYr+e2+d3rTgUGslq5rxbBlUy3cJ61IsHag2QNDQV+7zXWjkUpmALIajhrlLlrgRUiymj6U3zUr/TMK84Q=="
+        }
+      ]
+    },
+    {
+      "package": "multer",
+      "severityBefore": "moderate",
+      "isDirect": false,
+      "before": [
+        {
+          "path": "node_modules/multer",
+          "version": "2.3.0",
+          "dev": false,
+          "integrity": "sha512-cjNbm3sttszgZeGfJR124D+jFEfkXCVAsoPBmFn9X7UxmDSFHWqE2CoEj0vrmSpuAFnqWR1Szcm9QTsiHr60Xw=="
+        }
+      ],
+      "after": [
+        {
+          "path": "node_modules/multer",
+          "version": "2.4.0",
+          "dev": false,
+          "integrity": "sha512-7dqa0ZcFfzbefdTuIkzOSMvZWC0J7FLqBOjJUZvDCXShIURWKxAyTT1wHhnE5q19c7jOJf43IYYKjBmZVZmvhg=="
+        }
+      ],
+      "auditAffectedRange": "2.2.0 - 2.3.0",
+      "auditSuggestedFix": {
+        "name": "@nestjs/platform-express",
+        "version": "11.2.7",
+        "isSemVerMajor": false
+      },
+      "chosenVersions": [
+        "2.4.0"
+      ],
+      "minimumSafe": "2.4.0",
+      "semverImpact": "minor from 2.3.0; Nest parent patch",
+      "breakingRisk": "Low: no active multipart pipeline; future diskStorage behavior is patched; adapter and production bootstrap regression required.",
+      "scope": "backend transitive runtime inventory; diskStorage upload path currently absent",
+      "sourceCode": [
+        "Nest Express adapter dependency; no MulterModule/FileInterceptor/diskStorage in backend/src"
+      ],
+      "parentChange": "@nestjs/platform-express 11.2.1 -> minimum safe 11.2.6; root Multer override 2.4.0",
+      "dependencyPaths": [
+        {
+          "node": "node_modules/multer",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/@nestjs/platform-express",
+              "version": "11.2.1",
+              "via": "dependencies",
+              "requires": "11.2.1"
+            },
+            {
+              "path": "node_modules/multer",
+              "version": "2.3.0",
+              "via": "dependencies",
+              "requires": "2.2.0"
+            }
+          ]
+        }
+      ],
+      "advisories": [
+        {
+          "ghsa": "GHSA-3pph-fpjx-jg34",
+          "cve": "CVE-2026-88932",
+          "cveStatus": "verified on GitHub reviewed advisory 2026-10-03",
+          "url": "https://github.com/advisories/GHSA-3pph-fpjx-jg34",
+          "title": "multer vulnerable to Denial of Service via orphaned disk writes on aborted uploads",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=2.2.0 <2.4.0"
+          ],
+          "minimumFixedVersions": [
+            "2.4.0"
+          ],
+          "affectedCodePath": "Multer diskStorage cleanup during an aborted multipart upload; no product upload interceptor/MulterModule/diskStorage pipeline exists.",
+          "sourceIds": [
+            1239935
+          ]
+        }
+      ],
+      "status": "FIXED",
+      "waiver": null,
+      "affectedBefore": [
+        {
+          "path": "node_modules/multer",
+          "version": "2.3.0",
+          "dev": false,
+          "integrity": "sha512-cjNbm3sttszgZeGfJR124D+jFEfkXCVAsoPBmFn9X7UxmDSFHWqE2CoEj0vrmSpuAFnqWR1Szcm9QTsiHr60Xw=="
+        }
+      ]
+    },
+    {
+      "package": "nodemailer",
+      "severityBefore": "high",
+      "isDirect": true,
+      "before": [
+        {
+          "path": "node_modules/nodemailer",
+          "version": "9.1.1",
+          "dev": false,
+          "integrity": "sha512-izw9mVKFix6YSnC9eLgV6g1opl9DUlRio9ZNcq+Wu9Ujn2UwF+8Nl0B8nz22kEC+CTZCvinkxwJ0DeFbb6NwcQ=="
+        }
+      ],
+      "after": [
+        {
+          "path": "node_modules/nodemailer",
+          "version": "10.0.9",
+          "dev": false,
+          "integrity": "sha512-BF0qcyplCwp+jMk6HCjFykBz/YhhZSsxrARhOldLwFWH+8kGjQsd2WIMIZhqEuyXRoGFi0ONbDeWDMDoL8MhLw=="
+        }
+      ],
+      "auditAffectedRange": "<=10.0.8",
+      "auditSuggestedFix": {
+        "name": "nodemailer",
+        "version": "10.0.13",
+        "isSemVerMajor": true
+      },
+      "chosenVersions": [
+        "10.0.9"
+      ],
+      "minimumSafe": "10.0.9 is maximum of five advisory fixed thresholds",
+      "semverImpact": "major 9.x -> 10.x",
+      "breakingRisk": "Moderate: Nodemailer 10 uses ESM/CJS/TypeScript distribution and Node >=20; Node 22 supported; verify import/types, queue and real SMTP adapter sandbox reset flow.",
+      "scope": "backend direct runtime SMTP dependency, enabled only by EMAIL_DELIVERY_ENABLED; parser safeguards are not a waiver",
+      "sourceCode": [
+        "backend/src/modules/notifications/email-sender.ts",
+        "backend/src/modules/notifications/notification-jobs.service.ts"
+      ],
+      "parentChange": "none; direct Nodemailer upgraded because no 9.x fix is documented for all five advisories",
+      "dependencyPaths": [
+        {
+          "node": "node_modules/nodemailer",
+          "chain": [
+            {
+              "path": "backend",
+              "version": "0.1.0",
+              "via": "workspace/root"
+            },
+            {
+              "path": "node_modules/nodemailer",
+              "version": "9.1.1",
+              "via": "dependencies",
+              "requires": "9.1.1"
+            }
+          ]
+        }
+      ],
+      "advisories": [
+        {
+          "ghsa": "GHSA-6vj9-mwq6-2f5v",
+          "cve": null,
+          "cveStatus": "No known CVE on GitHub reviewed advisory (checked 2026-10-03)",
+          "url": "https://github.com/advisories/GHSA-6vj9-mwq6-2f5v",
+          "title": "Nodemailer: Process-global DNS cache reuses TLS `servername` across transports, enabling cross-tenant SMTP credential disclosure",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=5.0.0 <10.0.2"
+          ],
+          "minimumFixedVersions": [
+            "10.0.2"
+          ],
+          "affectedCodePath": "Nodemailer global DNS/TLS servername cache across multiple transports; product creates one system SMTP transport without tenant-supplied TLS identity.",
+          "sourceIds": [
+            1239931
+          ]
+        },
+        {
+          "ghsa": "GHSA-8vvx-rff5-p5rq",
+          "cve": null,
+          "cveStatus": "No known CVE on GitHub reviewed advisory (checked 2026-10-03)",
+          "url": "https://github.com/advisories/GHSA-8vvx-rff5-p5rq",
+          "title": "Nodemailer: Nested structured recipient arrays bypass the parser depth limit and cause stack exhaustion DoS",
+          "severity": "moderate",
+          "affectedRanges": [
+            "<10.0.2"
+          ],
+          "minimumFixedVersions": [
+            "10.0.2"
+          ],
+          "affectedCodePath": "Nodemailer nested recipient-array parsing; EmailMessage.to is a string, no structured recipient arrays accepted.",
+          "sourceIds": [
+            1240033
+          ]
+        },
+        {
+          "ghsa": "GHSA-g57g-f23g-4646",
+          "cve": null,
+          "cveStatus": "No known CVE on GitHub reviewed advisory (checked 2026-10-03)",
+          "url": "https://github.com/advisories/GHSA-g57g-f23g-4646",
+          "title": "Nodemailer: Quoted local-part can produce malformed envelope recipient through RFC 5322 comment parsing",
+          "severity": "moderate",
+          "affectedRanges": [
+            ">=9.1.0 <10.0.9"
+          ],
+          "minimumFixedVersions": [
+            "10.0.9"
+          ],
+          "affectedCodePath": "Nodemailer quoted-address comment parsing into envelope recipient; DTO IsEmail and max length reject tested examples but do not prove all imported historical values safe.",
+          "sourceIds": [
+            1240113
+          ]
+        },
+        {
+          "ghsa": "GHSA-v53p-9fqp-m79j",
+          "cve": null,
+          "cveStatus": "No known CVE on GitHub reviewed advisory (checked 2026-10-03)",
+          "url": "https://github.com/advisories/GHSA-v53p-9fqp-m79j",
+          "title": "Nodemailer: Quadratic backtracking in the addressparser free-text fallback allows remote denial of service",
+          "severity": "high",
+          "affectedRanges": [
+            "<=10.0.5"
+          ],
+          "minimumFixedVersions": [
+            "10.0.6"
+          ],
+          "affectedCodePath": "Nodemailer addressparser free-text quadratic regex; email input is a bounded validated string, but parser runtime is used for outbound email.",
+          "sourceIds": [
+            1240114
+          ]
+        },
+        {
+          "ghsa": "GHSA-prgh-xp8r-p3m5",
+          "cve": null,
+          "cveStatus": "No known CVE on GitHub reviewed advisory (checked 2026-10-03)",
+          "url": "https://github.com/advisories/GHSA-prgh-xp8r-p3m5",
+          "title": "Nodemailer addressparser: O(n^2) on comment-joined addresses enables a remote DoS (reachable via mailparser)",
+          "severity": "high",
+          "affectedRanges": [
+            ">=9.1.0 <=10.0.4"
+          ],
+          "minimumFixedVersions": [
+            "10.0.5"
+          ],
+          "affectedCodePath": "Nodemailer addressparser comment-joined quadratic processing; no inbound mailparser, outbound parser still exists.",
+          "sourceIds": [
+            1240614
+          ]
+        }
+      ],
+      "status": "FIXED",
+      "waiver": null,
+      "majorReleaseSource": "https://github.com/nodemailer/nodemailer/releases/tag/v10.0.0",
+      "affectedBefore": [
+        {
+          "path": "node_modules/nodemailer",
+          "version": "9.1.1",
+          "dev": false,
+          "integrity": "sha512-izw9mVKFix6YSnC9eLgV6g1opl9DUlRio9ZNcq+Wu9Ujn2UwF+8Nl0B8nz22kEC+CTZCvinkxwJ0DeFbb6NwcQ=="
+        }
+      ]
+    }
+  ]
+}

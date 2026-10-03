@@ -2,6 +2,7 @@
   "name": "logistics-platform",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.18.0",
   "workspaces": [
     "backend",
     "frontend"
@@ -30,10 +31,20 @@
   },
   "overrides": {
     "typescript": "6.0.3",
-    "multer": "2.3.0",
+    "multer": "2.4.0",
     "deepmerge-ts": "8.0.2",
     "mysql2": "3.24.4",
     "js-yaml@^3": "3.15.2",
-    "js-yaml@^4": "4.3.2"
+    "js-yaml@^4": "4.3.2",
+    "@nestjs/swagger": {
+      "js-yaml": "5.4.1"
+    },
+    "socket.io": {
+      "engine.io": "6.6.10"
+    },
+    "fast-uri@^3": "3.1.8",
+    "brace-expansion@^1": "1.1.21",
+    "brace-expansion@^2": "2.1.7",
+    "brace-expansion@^5": "5.0.12"
   }
 }

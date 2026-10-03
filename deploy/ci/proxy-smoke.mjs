@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { io } from 'socket.io-client';
+import { verifyReleasePair } from '../../backend/src/common/release/release-build.ts';
 
 // Fixed disposable container origin. TLS certificate is trusted via NODE_EXTRA_CA_CERTS.
 const origin = 'https://localhost:18443';
@@ -8,6 +9,19 @@ const request = (path, options) => fetch(`${origin}${path}`, { ...options, signa
 const ready = await request('/api/v1/health/ready');
 assert.equal(ready.status, 200);
 assert.equal((await ready.json()).data.status, 'ok');
+const versionResponse = await request('/api/v1/health/version');
+assert.equal(versionResponse.status, 200);
+const { data: backendRelease } = await versionResponse.json();
+assert.deepEqual(Object.keys(backendRelease).sort(), ['buildTimestamp', 'commitSha', 'runtimeNodeVersion']);
+assert.match(backendRelease.runtimeNodeVersion, /^v22\./);
+const frontendReleaseResponse = await request('/release.json');
+assert.equal(frontendReleaseResponse.status, 200);
+const frontendRelease = await frontendReleaseResponse.json();
+assert.deepEqual(Object.keys(frontendRelease).sort(), ['buildTimestamp', 'commitSha']);
+assert.equal(backendRelease.commitSha, frontendRelease.commitSha, 'live backend/frontend SHA match');
+assert.equal(backendRelease.buildTimestamp, frontendRelease.buildTimestamp, 'container builds retain the supplied build timestamp');
+assert.ok(Number.isFinite(Date.parse(backendRelease.buildTimestamp)));
+verifyReleasePair(backendRelease, frontendRelease, process.env);
 const html = await request('/login');
 assert.equal(html.status, 200);
 assert.match(html.headers.get('cache-control'), /no-cache/);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { io } from 'socket.io-client';
@@ -14,6 +15,7 @@ assert.equal(redis.port, '56379');
 const base = 'http://127.0.0.1:3101';
 const origin = 'https://i1.example.test';
 const password = randomBytes(24).toString('hex');
+const release = JSON.parse(await readFile(new URL('../dist/release-metadata.json', import.meta.url), 'utf8'));
 let logs = '';
 const child = spawn(process.execPath, ['dist/main.js'], {
   cwd: fileURLToPath(new URL('../', import.meta.url)),
@@ -41,6 +43,10 @@ try {
   }
   assert.ok(ready, 'production readiness');
   assert.equal((await fetch(`${base}/api/v1/health/live`)).status, 200);
+  const versionResponse = await fetch(`${base}/api/v1/health/version`);
+  assert.equal(versionResponse.status, 200);
+  const { data: version } = await versionResponse.json();
+  assert.deepEqual(version, { commitSha: release.commitSha, buildTimestamp: release.buildTimestamp, runtimeNodeVersion: process.version });
   assert.equal((await fetch(`${base}/api/docs`)).status, 404);
   assert.equal((await fetch(`${base}/api/v1/users`)).status, 401);
   const register = await fetch(`${base}/api/v1/auth/register`, {
@@ -99,6 +105,9 @@ try {
   }
   assert.ok(!logs.includes(password), 'logs must redact passwords');
   assert.ok(!logs.includes(auth.accessToken), 'logs must redact access tokens');
+  assert.ok(logs.includes(`"commitSha":"${release.commitSha}"`), 'startup logs identify the immutable release');
+  assert.ok(logs.includes(`"buildTimestamp":"${release.buildTimestamp}"`), 'startup logs preserve build time');
+  assert.ok(logs.includes(`"runtimeNodeVersion":"${process.version}"`), 'startup logs identify runtime Node');
   console.log('PASS production artifact: disabled providers, live/ready, auth/RBAC, secure cookie, trusted origin, socket revocation, rate limit/proxy and log redaction.');
 } finally {
   socket?.disconnect();
