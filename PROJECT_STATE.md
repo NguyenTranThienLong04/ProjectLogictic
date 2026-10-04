@@ -1,5 +1,9 @@
 # Current Phase
 
+Staging cutover preparation follow-up — 2026-10-04, 23:19 ICT: DEPLOY WIRING MISMATCH; stopped at the user-required deployment gate. Cache-busted public GET + fresh Chrome hard reload still show backend health 200/version 404 and frontend release HTML/old `index-BGj12pP4.js`; both Live SHAs UNKNOWN, expected `cade37c4`. Notification/Vehicle/A→B/GPS/legacy checks NOT RUN in this follow-up. No product/DB/resource/env changes; READY FOR CUTOVER NO. Fresh evidence: `docs/STAGING_PREPARATION_20261004.md` follow-up section.
+
+Staging preparation — 2026-10-04, 23:12 ICT: READY FOR CUTOVER NO. User committed notification fix as `cade37c4e16b1f1c0cde8af8c735f9b0624c11aa`; exact source unit/browser/build/provenance checks PASS and agent pushed the existing release branch. Live still old (backend version 404, frontend release HTML, old bundle); both Live SHAs unknown. SG01/SG02 staffed; existing SG01_TX01 now LINE_HAUL/eligible via audited Admin API. Vehicle 0; Driver sessions expired; A→B/GPS/negative/legacy smoke NOT RUN. No product edit, migration/reset/seed, direct SQL write or strict change. Report: `docs/STAGING_PREPARATION_20261004.md`.
+
 Driver notification + canonical Line-haul verification — 2026-10-04: local PASS; staging BLOCKED; READY FOR CUTOVER NO. Click navigation is independent of mark-read. Fresh staging: 22/22 Driver assignment notifications have correct metadata, but Live frontend still lacks links; SG01/SG02 staffed, 0 LINE_HAUL Drivers/Vehicles/Trips. Release SHAs unknown. No deploy/enforcement/migration/reset/seed. Report: `docs/NOTIFICATION_LINEHAUL_READINESS_20261004.md`.
 
 Logistics canonical flow local implementation — 2026-10-04: delivery confirmation invariant fixed; optional Line-haul enforcement prepared with a stable UTC cutover and audited legacy receive. Compatibility is the default. Local unit/PostgreSQL/browser/build checks PASS; staging deploy/enforcement NOT RUN. Report: `docs/LOGISTICS_CANONICAL_FLOW_20261004.md`. Prior release gates below remain open.
@@ -7,6 +11,10 @@ Logistics canonical flow local implementation — 2026-10-04: delivery confirmat
 Phase 1 release closure implementation — 2026-10-03: FUNCTIONAL PASS; RELEASE INTEGRITY BLOCKED; READY FOR STAGING DEPLOY NO. Online dependency audit 9→0 (production 8→0), no runtime HIGH/waivers. Exact H2/H3 exception passes read-only staging 26/26; all other migrations strict. Backend/frontend provenance and full SMTP sandbox E2E implemented. Clean Node 22/Linux CI and production containers PASS on local snapshot 644f3174ec0073e5fe42c540f3edc77cdda4219c. Staging email intent/config remains UNKNOWN per user; no delivery waiver. Hosted CI/current Render Live identity not verified for these changes. No staging migration/reset/history rewrite or deploy. Evidence: docs/PHASE1_RELEASE_CLOSURE_IMPLEMENTATION_20261003.md; supersedes earlier implementation gaps below.
 
 # Completed
+
+- Deployment gate follow-up (2026-10-04 23:19 ICT): verified health, version, release and entry with unique cache-bust URLs; confirmed old entry after fresh Chrome cache-disabled hard reload. Correctly stopped before business actions when expected SHA could not be verified. Updated evidence only; notification issue stays open.
+
+- Staging preparation (2026-10-04): read API/DB inventory first; verified SG01/SG02 active/staffed and live Driver/Fleet/staff management UI. Added LINE_HAUL to existing AVAILABLE SG01_TX01 via Admin API, verified eligibility and audit `293a56ee-9f9c-4674-8586-3b93abcd53fc`. Tested/pushed exact `cade37c4` to `release/phase1-p0-20260928`: backend 43/43, frontend 70/70, notification browser/F5 matrix, paired build/provenance PASS. Live health 200, PostgreSQL/Redis up; deployment contents still old. Details/limits: `docs/STAGING_PREPARATION_20261004.md`.
 
 - Notification/Line-haul follow-up (2026-10-04): decoupled dropdown/center navigation from slow/failed mark-read, preserved unread/retry feedback across navigation. Real App/router/auth F5 for pickup/delivery PASS at 375/768/1440; legacy/malformed fallbacks PASS. Backend notification API metadata/ownership/idempotency assertions added. Existing canonical line-haul reused unchanged: PostgreSQL/Redis G2/G3A/G3C2 22/22, operational API 24/24, focused unit 43/43, frontend 70/70, warehouse/browser checks, lint/typecheck/build PASS. Fresh read-only staging resource/Live-asset evidence and limitations: `docs/NOTIFICATION_LINEHAUL_READINESS_20261004.md`.
 
@@ -271,6 +279,8 @@ Phase 1 release closure implementation — 2026-10-03: FUNCTIONAL PASS; RELEASE 
 
 # In Progress
 
+- Staging preparation gates (2026-10-04 23:12 ICT): exact fix SHA is now published to release branch; main remains `68869cbc`. Await both Render services at `cade37c4`, owned DRIVER access, and vehicle plate/type/capacity. Driver capability gap resolved; Fleet still empty. Notification issue stays open; no A→B/GPS/negative/legacy staging PASS. CLI readiness P2028 is recorded separately from successful authenticated inventory. This supersedes the older zero-LINE_HAUL-driver inventory below.
+
 - Logistics rollout follow-up (fresh 2026-10-04 evidence): SG01/SG02 are active with one active staff each; 0 LINE_HAUL Drivers, Vehicles or Trips. Two P0 warehouses lack staff, including the destination of legacy standalone IN_TRANSIT `TRF-MUSKE729-PAEL`. Live frontend remains old; browser profile named Driver restores CUSTOMER; Live release SHAs unknown. Compatibility deployment, normal resource provisioning and real staging canonical/GPS/notification/legacy smoke remain before any strict cutover. Existing null shipment coordinates/history untouched; no deploy/enforcement/migration/reset/seed in this task.
 
 - Phase 1 release integrity remains BLOCKED only on unresolved staging email classification/delivery evidence (2026-10-03): user confirmed intent UNKNOWN. Dependency remediation, controlled checksum gate, provenance and full SMTP CI E2E now PASS. Existing Render Live identities remain unverified; local tested snapshot is not a hosted CI release. No staging email waiver or deploy. See `docs/PHASE1_RELEASE_CLOSURE_IMPLEMENTATION_20261003.md`.
@@ -297,6 +307,10 @@ Phase 1 release closure implementation — 2026-10-03: FUNCTIONAL PASS; RELEASE 
 - I3 BLOCKED: staging REDIS_URL, SMTP/sender, Linux target, HTTPS/DNS/ingress, runtime secret manager and backup/PITR/restore evidence remain missing. GitHub/CI/GHCR and Neon/runtime-role provisioning are complete. Runtime target registry pull access and operational/staging browser checks await target provisioning. Final evidence updates are local documentation changes after the frozen release SHA.
 
 # Next
+
+- User-required gate first: after both Render services serve `cade37c4e16b1f1c0cde8af8c735f9b0624c11aa`, recheck public release SHA/health/bundle and hard reload. If identity fails, stop and report deploy wiring mismatch; do not continue notification/resource/trip/legacy actions. Strict remains OFF.
+
+- Continue `docs/STAGING_PREPARATION_20261004.md`: verify both Render Live SHAs equal published `cade37c4e16b1f1c0cde8af8c735f9b0624c11aa`, complete Driver/Fleet access/setup, then notification and real A→B/GPS/negative/legacy smoke. Keep strict unset; do not consume/rewrite legacy as a substitute for testing the fixed release.
 
 - Close the gates in `docs/NOTIFICATION_LINEHAUL_READINESS_20261004.md`: verifiable compatibility release, normal Admin/Dispatcher resource setup and owned Driver session, then real staging smoke. Keep `LINE_HAUL_ENFORCEMENT_FROM` empty until canonical A→B, notification links, resources, legacy compatibility and release identity all pass.
 
