@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { getAddressFingerprint } from '../src/features/addresses/address-location-model.ts';
 import {
   quoteSignature,
   shipmentFormDefaults,
@@ -19,6 +20,9 @@ const validForm = {
   deliveryWard: 'Hoàn Kiếm',
   deliveryDistrict: 'Hoàn Kiếm',
   deliveryCity: 'Hà Nội',
+  deliveryLatitude: 21.0285,
+  deliveryLongitude: 105.8542,
+  confirmedAddressFingerprint: getAddressFingerprint({ street: '2 Tràng Tiền', ward: 'Hoàn Kiếm', district: 'Hoàn Kiếm', city: 'Hà Nội' }),
   description: 'Kiện hàng',
 };
 

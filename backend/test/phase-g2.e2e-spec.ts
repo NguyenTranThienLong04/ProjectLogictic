@@ -18,6 +18,8 @@ import {
 } from '../src/generated/prisma/client.js';
 import { PasswordHasherService } from '../src/modules/auth/password-hasher.service.js';
 import { RedisService } from '../src/redis/redis.service.js';
+import { ConfigService } from '@nestjs/config';
+import { WarehouseTransferFlowPolicy } from '../src/modules/warehouses/warehouse-transfer-flow.policy.js';
 import { ROUTE_PROVIDER, type RouteProvider } from '../src/modules/routing/route-provider.js';
 
 jest.setTimeout(120_000);
@@ -144,6 +146,12 @@ describe('Phase G2 line-haul load, dispatch, arrival and unload (e2e)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(WarehouseTransferFlowPolicy)
+      .useValue(
+        new WarehouseTransferFlowPolicy(
+          new ConfigService({ LINE_HAUL_ENFORCEMENT_FROM: '2026-01-01T00:00:00.000Z' }),
+        ),
+      )
       .overrideProvider(RedisService)
       .useValue(mockRedisService)
       .overrideProvider(ROUTE_PROVIDER)
@@ -405,6 +413,21 @@ describe('Phase G2 line-haul load, dispatch, arrival and unload (e2e)', () => {
   };
 
   it('rejects READY without a valid manifest and dispatch from PLANNED', async () => {
+    for (const missing of ['driverId', 'vehicleId']) {
+      const body: Record<string, string> = {
+        clientRequestId: randomUUID(),
+        originWarehouseId,
+        destinationWarehouseId,
+        driverId: secondaryDriverId,
+        vehicleId: secondaryVehicleId,
+      };
+      delete body[missing];
+      await request(server)
+        .post('/api/v1/line-haul/trips')
+        .set('Authorization', `Bearer ${dispatcherToken}`)
+        .send(body)
+        .expect(400);
+    }
     const emptyTripResponse = await createTrip(secondaryDriverId, secondaryVehicleId).expect(201);
     const emptyTripId = bodyFrom<{ id: string }>(emptyTripResponse).data.id;
     await scheduleTrip(emptyTripId);
@@ -494,6 +517,15 @@ describe('Phase G2 line-haul load, dispatch, arrival and unload (e2e)', () => {
     ).data;
     transferId = transfer.id;
     expect(transfer.status).toBe(WarehouseTransferStatus.PENDING);
+    expect(
+      bodyFrom<{ workflow: { lineHaulRequired: boolean; canStandaloneDispatch: boolean } }>(
+        transferResponse,
+      ).data.workflow,
+    ).toMatchObject({ lineHaulRequired: true, canStandaloneDispatch: false });
+    await request(server)
+      .post(`/api/v1/warehouses/${originWarehouseId}/transfers/${transferId}/dispatch`)
+      .set('Authorization', `Bearer ${originStaffToken}`)
+      .expect(409);
     const shipment = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } });
     expect(shipment).toMatchObject({
       status: ShipmentStatus.AT_ORIGIN_WAREHOUSE,
@@ -1203,6 +1235,67 @@ describe('Phase G2 line-haul load, dispatch, arrival and unload (e2e)', () => {
         'LineHaulTrip_timestamp_order_check',
       ].sort(),
     );
+  });
+
+  it('receives a pre-cutover standalone transfer without creating a trip or rewriting departure history', async () => {
+    const template = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } });
+    const legacyShipment = await prisma.shipment.create({
+      data: {
+        trackingCode: `SHP-G2-LEGACY-${runId}`,
+        clientRequestId: randomUUID(),
+        customerId,
+        senderSnapshot: template.senderSnapshot!,
+        receiverSnapshot: template.receiverSnapshot!,
+        pickupSnapshot: template.pickupSnapshot!,
+        deliverySnapshot: template.deliverySnapshot!,
+        packageSnapshot: template.packageSnapshot!,
+        pricingSnapshot: template.pricingSnapshot!,
+        totalFee: template.totalFee,
+        status: ShipmentStatus.IN_TRANSIT,
+        originWarehouseId,
+        destinationWarehouseId,
+        currentWarehouseId: null,
+      },
+    });
+    const departed = new Date('2025-12-31T23:59:59.000Z');
+    const legacy = await prisma.warehouseTransfer.create({
+      data: {
+        transferCode: `TRF-G2-LEGACY-${runId}`,
+        shipmentId: legacyShipment.id,
+        fromWarehouseId: originWarehouseId,
+        toWarehouseId: destinationWarehouseId,
+        clientRequestId: randomUUID(),
+        createdById: originStaffId,
+        status: WarehouseTransferStatus.IN_TRANSIT,
+        dispatchedById: originStaffId,
+        dispatchedAt: departed,
+      },
+    });
+    const receive = () =>
+      request(server)
+        .post(`/api/v1/warehouses/${destinationWarehouseId}/transfers/${legacy.id}/receive`)
+        .set('Authorization', `Bearer ${destinationStaffToken}`)
+        .send({});
+    const [first, retry] = await Promise.all([receive(), receive()]);
+    expect([first.status, retry.status]).toEqual([200, 200]);
+    expect(
+      await prisma.warehouseTransfer.findUniqueOrThrow({ where: { id: legacy.id } }),
+    ).toMatchObject({
+      status: WarehouseTransferStatus.COMPLETED,
+      dispatchedAt: departed,
+      dispatchedById: originStaffId,
+    });
+    expect(
+      await prisma.lineHaulTripTransfer.count({ where: { warehouseTransferId: legacy.id } }),
+    ).toBe(0);
+    const audits = await prisma.auditLog.findMany({
+      where: { entityId: legacy.id, action: 'WAREHOUSE_TRANSFER_RECEIVED' },
+    });
+    expect(audits).toHaveLength(1);
+    expect(audits[0].metadata).toMatchObject({
+      flow: 'LEGACY_STANDALONE',
+      dispatchedAt: departed.toISOString(),
+    });
   });
 
   it('keeps READY valid with an honest Haversine snapshot when the route provider fails', async () => {

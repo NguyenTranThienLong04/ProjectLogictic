@@ -5,6 +5,7 @@ import type {
   WarehouseStaffProfile,
   WarehouseTransferStatus,
 } from '../../generated/prisma/client.js';
+import type { WarehouseTransferFlowPolicy } from './warehouse-transfer-flow.policy.js';
 
 export const warehouseShipmentInclude = {
   customer: { select: { fullName: true, phone: true } },
@@ -37,7 +38,18 @@ export const warehouseTransferResponseInclude = {
   receivedBy: true,
   lineHaulTripAssignments: {
     where: { isActive: true },
-    include: { trip: { select: { id: true, tripCode: true, status: true } } },
+    include: {
+      trip: {
+        select: {
+          id: true,
+          tripCode: true,
+          status: true,
+          scheduledStartAt: true,
+          vehicle: { select: { vehicleCode: true, licensePlate: true } },
+          driver: { select: { employeeCode: true, user: { select: { fullName: true } } } },
+        },
+      },
+    },
     take: 1,
   },
 } satisfies Prisma.WarehouseTransferInclude;
@@ -155,6 +167,7 @@ export function toWarehouseStaffProfileResponse(
 }
 
 export interface WarehouseTransferResponse {
+  workflow: ReturnType<WarehouseTransferFlowPolicy['describe']>;
   id: string;
   transferCode: string;
   shipmentId: string;
@@ -203,13 +216,19 @@ export interface WarehouseTransferResponse {
     id: string;
     tripCode: string;
     status: string;
+    scheduledStartAt: string | null;
+    vehicle: { vehicleCode: string; licensePlate: string };
+    driver: { employeeCode: string; fullName: string };
   } | null;
 }
 
 export function toWarehouseTransferResponse(
   transfer: WarehouseTransferResponseEntity,
+  flowPolicy: WarehouseTransferFlowPolicy,
 ): WarehouseTransferResponse {
+  const trip = transfer.lineHaulTripAssignments?.[0]?.trip;
   return {
+    workflow: flowPolicy.describe(transfer),
     id: transfer.id,
     transferCode: transfer.transferCode,
     shipmentId: transfer.shipmentId,
@@ -264,6 +283,15 @@ export function toWarehouseTransferResponse(
           fullName: transfer.receivedBy.fullName,
         }
       : null,
-    lineHaulTrip: transfer.lineHaulTripAssignments?.[0]?.trip ?? null,
+    lineHaulTrip: trip
+      ? {
+          id: trip.id,
+          tripCode: trip.tripCode,
+          status: trip.status,
+          scheduledStartAt: trip.scheduledStartAt?.toISOString() ?? null,
+          vehicle: trip.vehicle,
+          driver: { employeeCode: trip.driver.employeeCode, fullName: trip.driver.user.fullName },
+        }
+      : null,
   };
 }

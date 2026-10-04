@@ -151,6 +151,8 @@ describe('Phase 2 customer shipment flow (e2e)', () => {
         ward: 'Bến Nghé',
         district: 'Quận 1',
         city: 'Hồ Chí Minh',
+        latitude: 10.7769,
+        longitude: 106.7009,
       })
       .expect(201);
     const address = bodyFrom<AddressPayload>(addressResponse).data;
@@ -163,6 +165,8 @@ describe('Phase 2 customer shipment flow (e2e)', () => {
       ward: 'Tràng Tiền',
       district: 'Hoàn Kiếm',
       city: 'Hà Nội',
+      latitude: 21.0285,
+      longitude: 105.8542,
     };
     const packageData = {
       description: 'Kiện hàng E2E',
@@ -218,6 +222,17 @@ describe('Phase 2 customer shipment flow (e2e)', () => {
     const shipment = bodyFrom<ShipmentPayload>(createResponse).data;
     expect(shipment.totalFee).toBe(35501);
     expect(shipment.timeline).toHaveLength(1);
+    expect(
+      (await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } })).deliverySnapshot,
+    ).toMatchObject({ latitude: 21.0285, longitude: 105.8542 });
+    await request(server)
+      .patch(`/api/v1/addresses/${address.id}`)
+      .set('Authorization', `Bearer ${firstToken}`)
+      .send({ latitude: 10.78, longitude: 106.71 })
+      .expect(200);
+    const stored = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id } });
+    expect(stored.pickupSnapshot).toMatchObject({ latitude: 10.7769, longitude: 106.7009 });
+    expect(stored.deliverySnapshot).toMatchObject({ latitude: 21.0285, longitude: 105.8542 });
 
     const duplicateResponse = await request(server)
       .post('/api/v1/shipments')

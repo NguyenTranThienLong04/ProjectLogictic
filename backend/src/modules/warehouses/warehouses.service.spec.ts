@@ -11,6 +11,8 @@ import type { NotificationsService } from '../notifications/notifications.servic
 import type { PrismaService } from '../../database/prisma.service.js';
 import { WarehousesService } from './warehouses.service.js';
 import { WarehouseTransferLifecycleService } from './warehouse-transfer-lifecycle.service.js';
+import { WarehouseTransferFlowPolicy } from './warehouse-transfer-flow.policy.js';
+import { ConfigService } from '@nestjs/config';
 
 type MockFunction = jest.Mock<(...args: never[]) => Promise<unknown>>;
 type MockRepository = Record<string, MockFunction>;
@@ -126,6 +128,9 @@ describe('WarehousesService', () => {
       publishShipmentUpdated: jest.fn(() => Promise.resolve()),
     };
 
+    const flowPolicy = new WarehouseTransferFlowPolicy(
+      new ConfigService({ LINE_HAUL_ENFORCEMENT_FROM: '' }),
+    );
     service = new WarehousesService(
       prisma as unknown as PrismaService,
       transitionPolicy,
@@ -133,7 +138,9 @@ describe('WarehousesService', () => {
       new WarehouseTransferLifecycleService(
         transitionPolicy,
         notifications as unknown as NotificationsService,
+        flowPolicy,
       ),
+      flowPolicy,
     );
   });
 

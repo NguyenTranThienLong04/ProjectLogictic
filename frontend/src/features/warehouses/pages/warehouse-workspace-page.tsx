@@ -21,6 +21,7 @@ import { useAuth } from '../../auth/auth-context';
 import { AccountLayout } from '../../auth/components/account-layout';
 import { dimensionInputError } from '../../shipments/package-dimensions';
 import { transferBlockReason, type TransferContext } from '../transfer-form';
+import { TransferTripSummary } from '../transfer-trip-summary';
 import {
   checkInShipment,
   createTransfer,
@@ -211,7 +212,7 @@ export function WarehouseWorkspacePage() {
       setTransferNote('');
       setTransferClientRequestId('');
       setActiveTab('outbound_transfers');
-      setSuccess(`Đã tạo chuyến ${transfer.transferCode}. Chuyến đang chờ xác nhận xuất kho.`);
+      setSuccess(`Đã tạo transfer ${transfer.transferCode}. Đang chờ điều phối chuyến trung chuyển.`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['warehouse-inventory', activeWarehouseId] }),
         queryClient.invalidateQueries({ queryKey: ['outbound-transfers', activeWarehouseId] }),
@@ -221,6 +222,7 @@ export function WarehouseWorkspacePage() {
 
   const dispatchTransferMutation = useMutation({
     mutationFn: (transferId: string) => dispatchTransfer(activeWarehouseId, transferId),
+    onError: async () => { await outboundTransfers.refetch(); },
     onSuccess: async (transfer) => {
       setDispatchModalTransfer(null);
       setSuccess(`Đã xuất kho chuyến ${transfer.transferCode}; kiện hàng đang trung chuyển.`);
@@ -237,6 +239,7 @@ export function WarehouseWorkspacePage() {
         note: input.note,
         actualWeightGrams: input.actualWeightGrams,
       }),
+    onError: async () => { await inboundTransfers.refetch(); },
     onSuccess: async (transfer) => {
       setReceiveModalTransfer(null);
       setReceiveNote('');
@@ -850,7 +853,7 @@ export function WarehouseWorkspacePage() {
             <div>
               <h2 className="text-lg font-semibold text-ink">Các chuyến trung chuyển gửi đi</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Chuyến mới tạo ở trạng thái chờ xuất; chỉ Dispatch mới đưa kiện sang trung chuyển.
+                Tạo transfer để điều phối xếp chuyến. Kiện rời kho khi chuyến trung chuyển khởi hành.
               </p>
             </div>
             <ErrorSummary
@@ -862,6 +865,7 @@ export function WarehouseWorkspacePage() {
             />
             <DataTable
               caption="Danh sách chuyến trung chuyển gửi đi"
+              wide
               columns={[
                 {
                   id: 'transferCode',
@@ -917,6 +921,7 @@ export function WarehouseWorkspacePage() {
                     </div>
                   ),
                 },
+                { id: 'lineHaulTrip', header: 'Chuyến trung chuyển', render: (transfer) => <TransferTripSummary transfer={transfer} /> },
                 {
                   id: 'action',
                   header: 'Thao tác',
@@ -927,9 +932,9 @@ export function WarehouseWorkspacePage() {
                         className="focus-ring inline-flex min-h-11 w-full items-center justify-center rounded-control border border-border px-3 text-sm font-semibold text-primary hover:bg-primary-soft md:w-auto"
                         to={`/warehouse/line-haul/${transfer.lineHaulTrip.id}`}
                       >
-                        Xuất theo {transfer.lineHaulTrip.tripCode}
+                        Xem chuyến {transfer.lineHaulTrip.tripCode}
                       </Link>
-                    ) : transfer.status === 'PENDING' ? (
+                    ) : transfer.workflow?.canStandaloneDispatch ? (
                       <Button
                         className="w-full whitespace-nowrap md:w-auto"
                         disabled={dispatchTransferMutation.isPending}
@@ -943,7 +948,7 @@ export function WarehouseWorkspacePage() {
                       </Button>
                     ) : (
                       <span className="text-sm text-muted-foreground">
-                        {transfer.status === 'IN_TRANSIT' ? 'Đã rời kho' : 'Đã xử lý'}
+                        {transfer.status === 'PENDING' ? 'Chờ xếp chuyến' : transfer.status === 'IN_TRANSIT' ? 'Đã rời kho' : 'Đã xử lý'}
                       </span>
                     ),
                 },
@@ -978,6 +983,7 @@ export function WarehouseWorkspacePage() {
             </div>
             <DataTable
               caption="Danh sách chuyến trung chuyển đến kho"
+              wide
               columns={[
                 {
                   id: 'transferCode',
@@ -1030,13 +1036,13 @@ export function WarehouseWorkspacePage() {
                     </span>
                   ),
                 },
+                { id: 'lineHaulTrip', header: 'Chuyến trung chuyển', render: (transfer) => <TransferTripSummary transfer={transfer} /> },
                 {
                   id: 'action',
                   header: 'Thao tác',
                   align: 'right',
                   render: (transfer) =>
-                    transfer.status === 'IN_TRANSIT' &&
-                    (!transfer.lineHaulTrip || transfer.lineHaulTrip.status === 'ARRIVED') ? (
+                    transfer.workflow?.canReceive ? (
                       <Button
                         className="w-full whitespace-nowrap md:w-auto"
                         disabled={receiveTransferMutation.isPending}
@@ -1052,7 +1058,7 @@ export function WarehouseWorkspacePage() {
                         Chờ {transfer.lineHaulTrip.tripCode} đến
                       </Link>
                     ) : (
-                      <span className="text-sm text-muted-foreground">Đã xử lý</span>
+                      <span className="text-sm text-muted-foreground">{transfer.status === 'IN_TRANSIT' ? 'Cần kiểm tra chuyến với điều phối' : 'Đã xử lý'}</span>
                     ),
                 },
               ]}
@@ -1306,7 +1312,7 @@ export function WarehouseWorkspacePage() {
         {/* Modal: Create Transfer */}
         {transferSelection ? (
           <Modal
-            description="Create tạo bản ghi chờ xuất. Kiện chỉ rời inventory sau khi Dispatch."
+            description="Tạo yêu cầu chuyển kho để điều phối xếp chuyến. Kiện vẫn ở kho cho đến khi khởi hành."
             footer={
               <>
                 <Button disabled={transferMutation.isPending || transferContext.isFetching} variant="secondary" onClick={() => setTransferSelection(null)}>

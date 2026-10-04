@@ -44,6 +44,13 @@ export interface WarehouseStaffProfile {
 }
 
 export interface WarehouseTransfer {
+  workflow?: {
+    lineHaulRequired: boolean;
+    enforcementFrom: string | null;
+    legacyStandalone: boolean;
+    canStandaloneDispatch: boolean;
+    canReceive: boolean;
+  };
   id: string;
   transferCode: string;
   shipmentId: string;
@@ -92,6 +99,9 @@ export interface WarehouseTransfer {
     id: string;
     tripCode: string;
     status: 'PLANNED' | 'READY' | 'IN_TRANSIT' | 'ARRIVED' | 'CANCELLED';
+    scheduledStartAt?: string | null;
+    vehicle?: { vehicleCode: string; licensePlate: string };
+    driver?: { employeeCode: string; fullName: string };
   } | null;
 }
 

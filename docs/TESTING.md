@@ -22,7 +22,7 @@ Unit > Integration > E2E critical flows. Business-critical feature chưa test = 
 - Create Shipment from saved pickup address copies valid latitude/longitude into immutable pickup snapshot; editing CustomerAddress afterward does not mutate that snapshot.
 - Pickup AssignmentCandidates ranking succeeds with valid pickup snapshot coordinates; missing, incomplete, NaN, Infinity or out-of-range coordinates fail safely before route calculation.
 - Backend rejects latitude outside `[-90, 90]` and longitude outside `[-180, 180]`.
-- Delivery location selected by LocationPicker reaches the backend as the selected coordinate pair without editable latitude/longitude UI fields; omission remains supported.
+- Create Shipment requires a current confirmed delivery pin: immediate submit includes numeric lat/lng; street/ward/province/district edits block validation and serializer until reconfirmation. Quote/API omission compatibility and legacy Driver null fallback remain supported.
 - Picker click/drag/confirm, keyboard selection, cancel preserving the previous value, tile failure feedback and responsive layout remain usable.
 
 Service/DTO unit coverage: `addresses.service.spec.ts`, `create-address.dto.spec.ts`, `shipments.service.spec.ts`, `assignment-candidates.service.spec.ts`, `quote-address.dto.spec.ts`. Service mocks verify persistence mapping, not real database reload. Independent Chromium picker smoke: start frontend Vite on port 5179, then run `node frontend/test/location-picker/check.mjs`; fixture uses the real shared component with tile requests aborted to exercise unavailable tiles, without an API/database. This smoke does not replace authenticated API/database E2E for create/edit/reload and shipment creation.
@@ -185,6 +185,14 @@ Correct Fix
 Regression Test
 ```
 Nếu bug liên quan business rule → fix backend (source of truth) trước. Không patch UI để che lỗi backend.
+
+## Logistics canonical flow regression (2026-10-04)
+
+- `warehouse-transfer-flow.policy.spec.ts` + `warehouse-transfer-lifecycle.service.spec.ts`: compatibility default, exact cutover boundary, pending-before-cutover blocked departure, ownership/route/ARRIVED, pre-cutover standalone receipt/audit, post-cutover/missing timestamp reject, retry no duplicate.
+- `phase-g2.e2e-spec.ts` now overrides only its policy to strict and verifies real PostgreSQL manifest/departure/arrival/receive, resource/route/capacity negatives, missing Driver/Vehicle DTO, standalone blocked and legacy receipt preserved under concurrent retry. `phase-g3a.e2e-spec.ts` retains real Redis/GPS/Socket coverage. `phase2.e2e-spec.ts` checks persisted delivery coordinates and saved-address edits leaving pickup snapshot unchanged.
+- `node frontend/test/address-location/check.mjs --search`: actual Shipment HTTP never sent for stale street/ward/province, reconfirmation restores coordinate payload; standalone Quote retains optional coordinates.
+- `node frontend/test/ui-flow/canonical-flow.mjs`: real components with intercepted HTTP/tiles at 375/768/1440 px; strict/compatibility Warehouse actions, trip resource/schedule labels, arrival/legacy receive, distinct Driver/receiver markers, reload, no GPS and legacy null fallback. Screenshots in ignored `test-results/canonical-flow/`.
+- Readiness: after backend build, set explicit `READINESS_DATABASE_URL` and run `node backend/scripts/check-line-haul-readiness.mjs <origin UUID> <destination UUID> <UTC start> <UTC end> [completed smoke trip UUID]`. `REPEATABLE READ READ ONLY`, no implicit env file or writes, exit 2 for missing resources/smoke. Check every operational route and manual GPS/cutover gates; exit 0 alone is not deployment authorization.
 
 ## Phase I1 audit verification
 

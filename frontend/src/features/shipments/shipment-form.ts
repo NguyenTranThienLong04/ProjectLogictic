@@ -2,13 +2,13 @@ import { z } from 'zod';
 import type { Address } from '../addresses/address-api';
 import type { QuoteInput } from '../pricing/pricing-api';
 import type { AddressSnapshot } from './shipment-types';
-import { getConfirmedCoordinate, type LocationAddressContext } from '../addresses/address-location-model.ts';
+import { getConfirmedCoordinate, isLocationStale, STALE_LOCATION_MESSAGE, type LocationAddressContext } from '../addresses/address-location-model.ts';
 import { isCanonicalAddress } from '../addresses/administrative-model.ts';
 import { packageDimensionSchemas } from './package-dimensions.ts';
 
 const phonePattern = /^\+?[0-9][0-9\s-]{7,18}[0-9]$/;
 
-export const shipmentFormSchema = z
+export const quoteFormSchema = z
   .object({
     pickupAddressId: z.string().uuid('Chọn địa chỉ lấy hàng'),
     deliveryContactName: z.string().trim().min(2, 'Tên người nhận cần ít nhất 2 ký tự').max(100),
@@ -60,7 +60,27 @@ export const shipmentFormSchema = z
     }
   });
 
-export type ShipmentFormValues = z.infer<typeof shipmentFormSchema>;
+export type ShipmentFormValues = z.infer<typeof quoteFormSchema>;
+
+export const shipmentFormSchema = quoteFormSchema.superRefine((values, context) => {
+  const message = deliveryLocationError(values);
+  if (message) context.addIssue({ code: 'custom', message, path: ['confirmedAddressFingerprint'] });
+});
+
+export function deliveryLocationError(values: Partial<ShipmentFormValues>): string | undefined {
+  if (confirmedDeliveryCoordinate(values)) return undefined;
+  return isLocationStale(values.confirmedAddressFingerprint, getDeliveryAddressContext(values))
+    ? STALE_LOCATION_MESSAGE : 'Vui lòng xác nhận vị trí giao hàng trên bản đồ trước khi tạo vận đơn.';
+}
+
+function confirmedDeliveryCoordinate(values: Partial<ShipmentFormValues>) {
+  return getConfirmedCoordinate(
+    values.deliveryLatitude !== undefined && values.deliveryLongitude !== undefined
+      ? { latitude: values.deliveryLatitude, longitude: values.deliveryLongitude } : undefined,
+    values.confirmedAddressFingerprint,
+    getDeliveryAddressContext(values),
+  );
+}
 
 export const shipmentFormDefaults = {
   pickupAddressId: '',
@@ -95,12 +115,13 @@ export function addressToSnapshot(address: Address): AddressSnapshot {
 }
 
 export function deliverySnapshot(values: ShipmentFormValues): AddressSnapshot {
-  const coordinate = getConfirmedCoordinate(
-    values.deliveryLatitude !== undefined && values.deliveryLongitude !== undefined
-      ? { latitude: values.deliveryLatitude, longitude: values.deliveryLongitude } : undefined,
-    values.confirmedAddressFingerprint,
-    getDeliveryAddressContext(values),
-  );
+  const message = deliveryLocationError(values);
+  if (message) throw new Error(message);
+  return quoteDeliverySnapshot(values);
+}
+
+function quoteDeliverySnapshot(values: ShipmentFormValues): AddressSnapshot {
+  const coordinate = confirmedDeliveryCoordinate(values);
   return {
     contactName: values.deliveryContactName.trim(),
     phone: values.deliveryPhone.trim(),
@@ -123,7 +144,7 @@ export function parseOptionalCoordinateInput(value: unknown): number | undefined
 export function quoteInput(values: ShipmentFormValues, pickupAddress: Address): QuoteInput {
   return {
     pickup: addressToSnapshot(pickupAddress),
-    delivery: deliverySnapshot(values),
+    delivery: quoteDeliverySnapshot(values),
     packageType: values.packageType,
     weightGrams: values.weightGrams,
     lengthCm: values.lengthCm,

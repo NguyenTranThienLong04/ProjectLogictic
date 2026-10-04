@@ -404,6 +404,8 @@ try {
   await checkFocus([10.77, 106.695], 15);
   console.log('PASS saved legacy Africa coordinate: existing marker, edit invalidation, draft discarded, ward fallback');
 
+  for (const width of [375, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
   for (const screen of ['/shipments/new', '/quote']) {
     quotes = []; shipments = [];
     await open(screen);
@@ -420,14 +422,30 @@ try {
     await expect(stale()).toBeVisible();
     const calculate = page.getByRole('button', { name: screen === '/quote' ? 'Tính phí vận chuyển' : 'Tính lại phí', exact: true });
     await calculate.click();
-    await expect.poll(() => quotes.length).toBe(1);
-    assert(!('latitude' in quotes[0].delivery));
-    assert(!('longitude' in quotes[0].delivery));
+    if (screen === '/shipments/new') {
+      await expect(page.getByRole('button', { name: 'Tạo vận đơn', exact: true })).toBeDisabled();
+      await expect(page.getByText('Cần xác nhận lại vị trí giao hàng trước khi tạo vận đơn.')).toBeVisible();
+      assert.equal(quotes.length, 0);
+      assert.equal(shipments.length, 0);
+      for (const change of ['ward', 'province']) {
+        await pin();
+        if (change === 'ward') await choose(ward, 'sai gon', 'Sài Gòn');
+        else { await choose(city, 'hà nội', 'Hà Nội'); await choose(ward, 'hoan kiem', 'Hoàn Kiếm'); }
+        await calculate.click();
+        await expect(stale()).toBeVisible();
+        assert.equal(quotes.length, 0);
+        assert.equal(shipments.length, 0);
+      }
+    } else {
+      await expect.poll(() => quotes.length).toBe(1);
+      assert(!('latitude' in quotes[0].delivery));
+      assert(!('longitude' in quotes[0].delivery));
+    }
     await pin();
     const confirmed = (await selectedText().textContent()).split(',').map(Number);
     await page.getByLabel('Tên người nhận').fill('Người nhận khác');
     await calculate.click();
-    await expect.poll(() => quotes.length).toBe(2);
+    await expect.poll(() => quotes.length).toBe(screen === '/quote' ? 2 : 1);
     near([quotes.at(-1).delivery.latitude, quotes.at(-1).delivery.longitude], confirmed);
     if (screen === '/shipments/new') {
       await page.getByRole('button', { name: 'Tạo vận đơn', exact: true }).click();
@@ -435,7 +453,9 @@ try {
       near([shipments[0].deliveryAddress.latitude, shipments[0].deliveryAddress.longitude], confirmed);
       assert.equal(shipments[0].deliveryAddress.streetAddress, '126 Nguyễn Trãi');
     }
-    console.log(`PASS ${screen}: stale omitted from actual HTTP payload, current confirmation included, contact change preserved`);
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    console.log(`PASS ${width} ${screen}: ${screen === '/quote' ? 'optional stale quote coordinates omitted' : 'stale street/ward/province blocked before HTTP'}, reconfirmed coordinates included, contact change preserved`);
+  }
   }
   if (searchMode) {
     addresses = [];

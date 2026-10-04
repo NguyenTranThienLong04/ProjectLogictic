@@ -84,17 +84,31 @@ test('legacy geographic fields are preserved for contact-only edit but cannot cr
   assert.equal(addressSchema.safeParse({ ...legacy, originalAddressFingerprint: undefined }).success, false);
 });
 
-test('delivery serializer never sends Africa coordinate after changing the current address', () => {
+test('shipment rejects stale delivery confirmation in validation AND serialization', () => {
   assert.equal(deliverySnapshot(delivery).latitude, coordinate.latitude);
   for (const change of [{ deliveryStreetAddress: '124 Nguyễn Trãi' }, { deliveryWard: 'Sài Gòn' }, { deliveryCity: 'Hà Nội' }, { deliveryDistrict: 'Quận khác' }]) {
-    const snapshot = deliverySnapshot({ ...delivery, ...change });
-    assert(!('latitude' in snapshot));
-    assert(!('longitude' in snapshot));
+    assert.equal(shipmentFormSchema.safeParse({ ...delivery, ...change }).success, false);
+    assert.throws(() => deliverySnapshot({ ...delivery, ...change }), /Địa chỉ đã thay đổi/);
   }
   assert.equal(deliverySnapshot({ ...delivery, deliveryPhone: '0987654321' }).latitude, coordinate.latitude);
   const changed = { ...delivery, deliveryStreetAddress: '124 Nguyễn Trãi', deliveryLatitude: 10.77, deliveryLongitude: 106.695 };
   assert.equal(deliverySnapshot({ ...changed, confirmedAddressFingerprint: getAddressFingerprint(getDeliveryAddressContext(changed)) }).latitude, 10.77);
-  assert(!('latitude' in deliverySnapshot({ ...delivery, confirmedAddressFingerprint: undefined })));
+  assert.throws(() => deliverySnapshot({ ...delivery, confirmedAddressFingerprint: undefined }), /xác nhận vị trí/);
+});
+
+test('confirmed coordinates survive immediate submit, contact edits and reconfirmation; missing/invalid pins block create', () => {
+  assert.equal(shipmentFormSchema.safeParse(delivery).success, true);
+  assert.deepEqual([deliverySnapshot(delivery).latitude, deliverySnapshot(delivery).longitude], [coordinate.latitude, coordinate.longitude]);
+  for (const change of [{ deliveryLatitude: undefined }, { deliveryLongitude: undefined },
+    { deliveryLatitude: NaN }, { deliveryLongitude: Infinity }, { deliveryLatitude: 91 },
+    { deliveryLatitude: undefined, deliveryLongitude: undefined, confirmedAddressFingerprint: undefined }]) {
+    assert.equal(shipmentFormSchema.safeParse({ ...delivery, ...change }).success, false);
+    assert.throws(() => deliverySnapshot({ ...delivery, ...change }));
+  }
+  const changed = { ...delivery, deliveryStreetAddress: '124 Nguyễn Trãi', deliveryWard: 'Sài Gòn', deliveryLatitude: 10.77, deliveryLongitude: 106.695 };
+  changed.confirmedAddressFingerprint = getAddressFingerprint(getDeliveryAddressContext(changed));
+  assert.equal(shipmentFormSchema.safeParse(changed).success, true);
+  assert.deepEqual([deliverySnapshot(changed).latitude, deliverySnapshot(changed).longitude], [10.77, 106.695]);
 });
 
 test('delivery schema accepts two-level addresses, rejects a ward under the wrong province', () => {

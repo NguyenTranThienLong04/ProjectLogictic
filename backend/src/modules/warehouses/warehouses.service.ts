@@ -29,6 +29,7 @@ import type { UpdateWarehouseDto } from './dto/update-warehouse.dto.js';
 import type { WarehouseCheckInDto } from './dto/warehouse-check-in.dto.js';
 import { warehouseListWhere } from './warehouse-list-query.js';
 import { WarehouseTransferLifecycleService } from './warehouse-transfer-lifecycle.service.js';
+import { WarehouseTransferFlowPolicy } from './warehouse-transfer-flow.policy.js';
 import {
   toWarehouseResponse,
   toWarehouseStaffProfileResponse,
@@ -50,6 +51,7 @@ export class WarehousesService {
     private readonly transitionPolicy: ShipmentTransitionPolicy,
     private readonly notifications: NotificationsService,
     private readonly transferLifecycle: WarehouseTransferLifecycleService,
+    private readonly transferFlowPolicy: WarehouseTransferFlowPolicy,
   ) {}
 
   // ==========================================
@@ -860,7 +862,7 @@ export class WarehousesService {
     });
     if (existing) {
       this.assertTransferIdempotency(existing, warehouseId, dto);
-      return toWarehouseTransferResponse(existing);
+      return toWarehouseTransferResponse(existing, this.transferFlowPolicy);
     }
 
     const activeTransfer = await this.prisma.warehouseTransfer.findFirst({
@@ -872,7 +874,7 @@ export class WarehousesService {
     });
     if (activeTransfer) {
       this.assertActiveTransferMatches(activeTransfer, warehouseId, dto);
-      return toWarehouseTransferResponse(activeTransfer);
+      return toWarehouseTransferResponse(activeTransfer, this.transferFlowPolicy);
     }
 
     if (dto.toWarehouseId === warehouseId) {
@@ -1007,7 +1009,7 @@ export class WarehousesService {
       transfer = committed;
     }
 
-    return toWarehouseTransferResponse(transfer);
+    return toWarehouseTransferResponse(transfer, this.transferFlowPolicy);
   }
 
   async dispatchTransfer(
@@ -1032,7 +1034,7 @@ export class WarehousesService {
         ShipmentStatus.IN_TRANSIT,
       );
     }
-    return toWarehouseTransferResponse(result.transfer);
+    return toWarehouseTransferResponse(result.transfer, this.transferFlowPolicy);
   }
 
   async receiveTransfer(
@@ -1061,7 +1063,7 @@ export class WarehousesService {
         ShipmentStatus.AT_DESTINATION_WAREHOUSE,
       );
     }
-    return toWarehouseTransferResponse(result.transfer);
+    return toWarehouseTransferResponse(result.transfer, this.transferFlowPolicy);
   }
 
   // ==========================================
@@ -1181,7 +1183,9 @@ export class WarehousesService {
       take: 100,
     });
 
-    return transfers.map(toWarehouseTransferResponse);
+    return transfers.map((transfer) =>
+      toWarehouseTransferResponse(transfer, this.transferFlowPolicy),
+    );
   }
 
   // ==========================================
@@ -1223,7 +1227,9 @@ export class WarehousesService {
     ]);
 
     return {
-      incomingTransfers: incomingTransfers.map(toWarehouseTransferResponse),
+      incomingTransfers: incomingTransfers.map((transfer) =>
+        toWarehouseTransferResponse(transfer, this.transferFlowPolicy),
+      ),
       pickedUpShipments: pickedUpShipments.map((shipment) => this.serializeShipment(shipment)),
     };
   }

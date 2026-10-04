@@ -218,6 +218,34 @@ describe('DeliveryService', () => {
     });
   });
 
+  it('reloads the receiver target from the immutable snapshot and preserves legacy null fallback', async () => {
+    const current = assignment();
+    const findFirst = jest.fn(() => Promise.resolve(current));
+    const prisma = { driverAssignment: { findFirst } } as unknown as PrismaService;
+    const first = await service(prisma).getMine(actor.id, assignmentId);
+    const reloaded = await service(prisma).getMine(actor.id, assignmentId);
+    expect(first.taskLocation).toEqual(reloaded.taskLocation);
+    expect(reloaded.taskLocation).toMatchObject({
+      kind: 'RECEIVER',
+      latitude: 10.779,
+      longitude: 106.701,
+    });
+    findFirst.mockResolvedValue(
+      assignment({
+        shipment: {
+          deliverySnapshot: {
+            ...current.shipment.deliverySnapshot,
+            latitude: null,
+            longitude: null,
+          },
+        },
+      }),
+    );
+    await expect(service(prisma).getMine(actor.id, assignmentId)).resolves.toMatchObject({
+      taskLocation: { kind: 'RECEIVER', latitude: null, longitude: null },
+    });
+  });
+
   it("rejects a driver's attempt to complete another driver's assignment", async () => {
     const current = assignment({
       driver: {

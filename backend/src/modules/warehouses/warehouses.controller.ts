@@ -221,7 +221,10 @@ export class WarehousesController {
   @Post(':id/transfers/:transferId/dispatch')
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.WAREHOUSE_STAFF, UserRole.DISPATCHER, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Dispatch a pending inter-warehouse transfer' })
+  @ApiOperation({
+    summary:
+      'Compatibility-only standalone dispatch; after LINE_HAUL_ENFORCEMENT_FROM depart the owning trip (409 LINE_HAUL_TRIP_REQUIRED)',
+  })
   dispatchTransfer(
     @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -234,7 +237,10 @@ export class WarehousesController {
   @Post(':id/transfers/:transferId/receive')
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.WAREHOUSE_STAFF, UserRole.DISPATCHER, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Receive an inbound transfer at destination warehouse' })
+  @ApiOperation({
+    summary:
+      'Receive after trip ARRIVED, or a standalone transfer dispatched before cutover; retries are idempotent',
+  })
   receiveTransfer(
     @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,

@@ -15,6 +15,7 @@ import type { AuthenticatedUser, ClientContext } from '../auth/auth.types.js';
 import { ShipmentTransitionPolicy } from '../assignments/shipment-transition.policy.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import type { ReceiveTransferDto } from './dto/receive-transfer.dto.js';
+import { WarehouseTransferFlowPolicy } from './warehouse-transfer-flow.policy.js';
 import {
   warehouseTransferResponseInclude,
   type WarehouseTransferResponseEntity,
@@ -46,6 +47,7 @@ export class WarehouseTransferLifecycleService {
   constructor(
     private readonly transitionPolicy: ShipmentTransitionPolicy,
     private readonly notifications: NotificationsService,
+    private readonly flowPolicy: WarehouseTransferFlowPolicy,
   ) {}
 
   assertDispatchableTransfer(
@@ -148,6 +150,7 @@ export class WarehouseTransferLifecycleService {
     });
 
     const dispatchedAt = new Date();
+    if (!input.lineHaulTripId) this.flowPolicy.assertStandaloneDispatch(dispatchedAt);
     const transferUpdate = await transaction.warehouseTransfer.updateMany({
       where: { id: transfer.id, status: WarehouseTransferStatus.PENDING },
       data: {
@@ -199,7 +202,9 @@ export class WarehouseTransferLifecycleService {
           shipmentStatus: ShipmentStatus.IN_TRANSIT,
           currentWarehouseId: null,
         },
-        metadata: input.lineHaulTripId ? { lineHaulTripId: input.lineHaulTripId } : undefined,
+        metadata: input.lineHaulTripId
+          ? { lineHaulTripId: input.lineHaulTripId }
+          : { flow: 'COMPATIBILITY_STANDALONE', enforcementFrom: this.flowPolicy.enforcementFrom },
         ipAddress: input.context.ipAddress ?? null,
         userAgent: input.context.userAgent ?? null,
       },
@@ -247,14 +252,29 @@ export class WarehouseTransferLifecycleService {
 
     const activeAssignment = await transaction.lineHaulTripTransfer.findFirst({
       where: { warehouseTransferId: transfer.id, isActive: true },
-      include: { trip: { select: { id: true, status: true } } },
+      include: {
+        trip: {
+          select: { id: true, status: true, originWarehouseId: true, destinationWarehouseId: true },
+        },
+      },
     });
+    if (
+      activeAssignment &&
+      (activeAssignment.trip.originWarehouseId !== transfer.fromWarehouseId ||
+        activeAssignment.trip.destinationWarehouseId !== transfer.toWarehouseId)
+    ) {
+      throw new ConflictException({
+        code: 'LINE_HAUL_TRANSFER_ROUTE_MISMATCH',
+        message: 'Transfer route must match its trip',
+      });
+    }
     if (activeAssignment && activeAssignment.trip.status !== LineHaulTripStatus.ARRIVED) {
       throw new ConflictException({
         code: 'LINE_HAUL_TRIP_NOT_ARRIVED',
         message: 'Confirm arrival of the line-haul trip before receiving its transfers',
       });
     }
+    if (!activeAssignment) this.flowPolicy.assertStandaloneReceive(transfer.dispatchedAt);
     this.transitionPolicy.assertTransferReceive(transfer.shipment.status);
 
     const receivedAt = new Date();
@@ -308,7 +328,15 @@ export class WarehouseTransferLifecycleService {
           actualWeightGrams: input.dto.actualWeightGrams,
           note: input.dto.note?.trim() || null,
         },
-        metadata: activeAssignment ? { lineHaulTripId: activeAssignment.tripId } : undefined,
+        metadata: activeAssignment
+          ? { lineHaulTripId: activeAssignment.tripId }
+          : {
+              flow: this.flowPolicy.isLegacyStandalone(transfer.dispatchedAt)
+                ? 'LEGACY_STANDALONE'
+                : 'COMPATIBILITY_STANDALONE',
+              enforcementFrom: this.flowPolicy.enforcementFrom,
+              dispatchedAt: transfer.dispatchedAt?.toISOString() ?? null,
+            },
         ipAddress: input.context.ipAddress ?? null,
         userAgent: input.context.userAgent ?? null,
       },

@@ -13,7 +13,7 @@ import { AccountLayout } from '../auth/components/account-layout';
 import {
   quoteInput,
   shipmentFormDefaults,
-  shipmentFormSchema,
+  quoteFormSchema,
   type ShipmentFormValues,
 } from '../shipments/shipment-form';
 import { ShipmentFormFields } from '../shipments/shipment-form-fields';
@@ -23,7 +23,7 @@ import { PriceBreakdown } from './price-breakdown';
 export function QuotePage() {
   const addressesQuery = useQuery({ queryKey: ['addresses'], queryFn: listAddresses });
   const { formState, handleSubmit, register, control, setValue } = useForm<ShipmentFormValues>({
-    resolver: zodResolver(shipmentFormSchema),
+    resolver: zodResolver(quoteFormSchema),
     mode: 'onBlur',
     defaultValues: shipmentFormDefaults,
   });
@@ -56,6 +56,7 @@ export function QuotePage() {
           <form className="mt-6 grid min-w-0 gap-6 lg:mt-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start" noValidate onSubmit={submit}>
             <div className="min-w-0">
               <ShipmentFormFields
+                requireDeliveryLocation={false}
                 control={control} setValue={setValue}
                 addresses={addressesQuery.data ?? []} errors={formState.errors} register={register} />
               <div className="mt-4">

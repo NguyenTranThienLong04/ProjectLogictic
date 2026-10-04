@@ -5,11 +5,12 @@ import { AssignmentsModule } from '../assignments/assignments.module.js';
 import { WarehousesController } from './warehouses.controller.js';
 import { WarehousesService } from './warehouses.service.js';
 import { WarehouseTransferLifecycleService } from './warehouse-transfer-lifecycle.service.js';
+import { WarehouseTransferFlowPolicy } from './warehouse-transfer-flow.policy.js';
 
 @Module({
   imports: [DatabaseModule, NotificationsModule, AssignmentsModule],
   controllers: [WarehousesController],
-  providers: [WarehousesService, WarehouseTransferLifecycleService],
+  providers: [WarehousesService, WarehouseTransferLifecycleService, WarehouseTransferFlowPolicy],
   exports: [WarehousesService, WarehouseTransferLifecycleService],
 })
 export class WarehousesModule {}

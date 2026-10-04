@@ -17,6 +17,7 @@ import { PriceBreakdown } from '../pricing/price-breakdown';
 import { createShipment } from './shipment-api';
 import {
   deliverySnapshot,
+  deliveryLocationError,
   quoteInput,
   quoteSignature,
   shipmentFormDefaults,
@@ -113,7 +114,7 @@ export function CreateShipmentPage() {
               </div>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button className="w-full sm:w-auto" disabled={!addressesQuery.data?.length || createMutation.isPending} loading={quoteMutation.isPending} onClick={calculate} variant="secondary">Tính lại phí</Button>
-                <Button className="w-full sm:w-auto" disabled={!quoteIsCurrent || quoteMutation.isPending} loading={createMutation.isPending} type="submit">Tạo vận đơn</Button>
+                <Button className="w-full sm:w-auto" disabled={!quoteIsCurrent || Boolean(deliveryLocationError(currentValues)) || quoteMutation.isPending} loading={createMutation.isPending} type="submit">Tạo vận đơn</Button>
               </div>
               {!quoteIsCurrent && quoteMutation.data ? (
                 <p className="mt-4 rounded-control border border-warning/30 bg-warning-soft px-3 py-2 text-sm font-medium text-warning" role="status">Thông tin đã thay đổi. Hãy tính lại phí trước khi tạo.</p>

@@ -1,3 +1,5 @@
+import { parseLineHaulEnforcementFrom } from './line-haul-enforcement.js';
+
 type Environment = Record<string, string | undefined>;
 
 const allowedNodeEnvironments = new Set(['development', 'test', 'production']);
@@ -247,6 +249,8 @@ export function validateEnvironment(environment: Environment): Environment {
       50,
     ),
     PAYMENT_PROVIDER: paymentProvider,
+    LINE_HAUL_ENFORCEMENT_FROM:
+      parseLineHaulEnforcementFrom(environment.LINE_HAUL_ENFORCEMENT_FROM)?.toISOString() ?? '',
     PAYMENT_TEST_WEBHOOK_SECRET: paymentTestWebhookSecret,
     PAYMENT_TIMEOUT_MS: positiveInteger(environment, 'PAYMENT_TIMEOUT_MS', 5_000, 15_000),
     LINE_HAUL_ROUTE_DEVIATION_METERS: positiveInteger(

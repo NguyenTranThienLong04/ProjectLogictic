@@ -4,12 +4,13 @@ import { EmptyState } from '../../components/ui/empty-state';
 import { FormField } from '../../components/ui/form-field';
 import { SelectField } from '../../components/ui/select-field';
 import type { Address } from '../addresses/address-api';
-import { getDeliveryAddressContext, type ShipmentFormValues } from './shipment-form';
+import { deliveryLocationError, getDeliveryAddressContext, type ShipmentFormValues } from './shipment-form';
 import { LocationPicker } from '../locations/location-picker';
 import { AdministrativeAddressFields } from '../addresses/administrative-address-fields';
 import { SHIPPING_FEE_PAYER_OPTIONS } from './shipping-fee-payer';
 
 interface ShipmentFormFieldsProps {
+  requireDeliveryLocation?: boolean;
   control: Control<ShipmentFormValues>;
   setValue: UseFormSetValue<ShipmentFormValues>;
   addresses: Address[];
@@ -17,9 +18,10 @@ interface ShipmentFormFieldsProps {
   register: UseFormRegister<ShipmentFormValues>;
 }
 
-export function ShipmentFormFields({ addresses, errors, register, control, setValue }: ShipmentFormFieldsProps) {
+export function ShipmentFormFields({ addresses, errors, register, control, setValue, requireDeliveryLocation = true }: ShipmentFormFieldsProps) {
   const values = useWatch({ control });
   const deliveryAddressContext = getDeliveryAddressContext(values);
+  const locationError = requireDeliveryLocation ? deliveryLocationError(values) : undefined;
   const deliveryLocation = values.deliveryLatitude !== undefined && values.deliveryLongitude !== undefined
     ? { latitude: values.deliveryLatitude, longitude: values.deliveryLongitude } : undefined;
   const onDeliveryAddress = (address: { city: string; ward: string; district: string }) => {
@@ -99,7 +101,8 @@ export function ShipmentFormFields({ addresses, errors, register, control, setVa
               cityError={errors.deliveryCity?.message} wardError={errors.deliveryWard?.message} onChange={onDeliveryAddress} />
           </div>
           <div className="sm:col-span-2">
-            <LocationPicker label="Vị trí giao hàng (tùy chọn)" value={deliveryLocation} onChange={onDeliveryLocation} addressContext={deliveryAddressContext} confirmedAddressFingerprint={values.confirmedAddressFingerprint} />
+            <LocationPicker label={requireDeliveryLocation ? 'Vị trí giao hàng (bắt buộc)' : 'Vị trí giao hàng (tùy chọn)'} value={deliveryLocation} onChange={onDeliveryLocation} addressContext={deliveryAddressContext} confirmedAddressFingerprint={values.confirmedAddressFingerprint} />
+            {locationError ? <p className="mt-2 text-sm text-warning" role="status">{values.confirmedAddressFingerprint ? 'Cần xác nhận lại vị trí giao hàng trước khi tạo vận đơn.' : locationError}</p> : null}
           </div>
         </div>
       </fieldset>
