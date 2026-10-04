@@ -33,11 +33,14 @@ try {
     const page = await browser.newPage({ viewport: { width, height: 1000 } });
     const errors = [], transfers = [], checkIns = [], reads = [], detailReads = [];
     let shipment = makeShipment(), activeTransfers = [], lookupError = false, readError = false, raceOnPost = false;
+    let readGate, releaseRead;
     const notifications = [
       { id: uuid(11), type: 'PICKUP_ASSIGNMENT_CREATED', title: 'Nhiệm vụ lấy hàng mới', data: { assignmentId: uuid(21), shipmentId: shipment.id } },
       { id: uuid(12), type: 'DELIVERY_ASSIGNMENT_CREATED', title: 'Nhiệm vụ giao hàng mới', data: { assignmentId: uuid(22), shipmentId: shipment.id } },
       { id: uuid(13), type: 'DELIVERY_ASSIGNMENT_CREATED', title: 'Giao hàng thiếu ID', data: { shipmentId: shipment.id } },
       { id: uuid(14), type: 'GENERAL', title: 'Thông báo chung', data: null },
+      { id: uuid(15), type: 'PICKUP_ASSIGNMENT_CREATED', title: 'Lấy hàng thiếu ID', data: { shipmentId: shipment.id } },
+      { id: uuid(16), type: 'PICKUP_ASSIGNMENT_CREATED', title: 'Lấy hàng ID lỗi', data: { assignmentId: '../invalid' } },
     ].map((n) => ({ ...n, eventKey: n.id, message: 'Mở nhiệm vụ', readAt: null, createdAt: now }));
     page.on('pageerror', (e) => { errors.push(e.message); console.error('Browser error:', e.message); });
     await page.route('**/api/v1/**', async (route) => {
@@ -45,6 +48,7 @@ try {
       let data;
       if (path.endsWith('/notifications')) data = { items: notifications, page: 1, totalPages: 1, unreadCount: notifications.filter((n) => !n.readAt).length };
       else if (path.endsWith('/read')) {
+        if (readGate) await readGate;
         if (readError) return route.fulfill({ status: 503, json: { message: 'Không thể đánh dấu đã đọc. Thử lại.' } });
         data = notifications.find((n) => path.includes(n.id)); data.readAt = now; reads.push(data.id);
       } else if (path.endsWith('/staff/me')) data = { warehouseId: origin.id, warehouse: origin, user: { fullName: 'Test Staff' } };
@@ -174,30 +178,46 @@ try {
     assert.deepEqual([checkIns[0].actualWeightGrams, checkIns[0].lengthCm, checkIns[0].widthCm, checkIns[0].heightCm], [1000,20,14.8,10]);
 
     for (const screen of ['/driver/assignments', '/notifications']) {
-      for (const [index, target] of [[0, `/driver/pickups/${uuid(21)}`], [1, `/driver/deliveries/${uuid(22)}`], [2, '/driver/deliveries'], [3, '/driver/assignments']]) {
+      for (const [index, target] of [[0, `/driver/pickups/${uuid(21)}`], [1, `/driver/deliveries/${uuid(22)}`], [2, '/driver/deliveries'], [3, '/driver/assignments'], [4, '/driver/assignments'], [5, '/driver/assignments']]) {
         await goto(screen);
         if (screen !== '/notifications') await page.locator('summary').filter({ hasText: 'Thông báo' }).click();
         await page.getByRole('button', { name: new RegExp(notifications[index].title) }).click();
         await expect(page.getByTestId('route')).toHaveText(target);
-        assert(notifications[index].readAt);
+        await expect.poll(() => notifications[index].readAt).toBeTruthy();
         if (index < 2) await expect(page.getByRole('heading', { name: index === 0 ? 'Chi tiết lấy hàng' : 'Chi tiết giao hàng', exact: true })).toBeVisible();
       }
     }
     assert(detailReads.some((path) => path.endsWith(uuid(21))));
     assert(detailReads.some((path) => path.endsWith(uuid(22))));
-    assert.equal(reads.length, 4, 'already-read notification still navigates without another PATCH');
+    assert.equal(reads.length, 6, 'already-read notification still navigates without another PATCH');
     for (const screen of ['/driver/assignments', '/notifications']) {
       notifications[0].readAt = null; readError = true;
       await goto(screen);
       if (screen !== '/notifications') await page.locator('summary').filter({ hasText: 'Thông báo' }).click();
       const task = page.getByRole('button', { name: /Nhiệm vụ lấy hàng mới/ });
       await task.click();
-      await expect(page.getByText('Không thể đánh dấu đã đọc. Thử lại.')).toBeVisible();
-      await expect(page.getByTestId('route')).toHaveText(screen);
+      await expect(page.getByTestId('route')).toHaveText(`/driver/pickups/${uuid(21)}`);
+      await expect(page.getByText(/Thông báo chưa được đánh dấu đã đọc/)).toBeVisible();
       assert.equal(notifications[0].readAt, null);
       readError = false;
+      await page.locator('summary').filter({ hasText: 'Thông báo' }).click();
       await task.click();
       await expect(page.getByTestId('route')).toHaveText(`/driver/pickups/${uuid(21)}`);
+      await expect.poll(() => notifications[0].readAt).toBeTruthy();
+    }
+    for (const screen of ['/driver/assignments', '/notifications']) {
+      for (const index of [0, 1]) {
+        notifications[index].readAt = null;
+        readGate = new Promise((resolve) => { releaseRead = resolve; });
+        await goto(screen);
+        if (screen !== '/notifications') await page.locator('summary').filter({ hasText: 'Thông báo' }).click();
+        await page.getByRole('button', { name: new RegExp(notifications[index].title) }).click();
+        await expect(page.getByTestId('route')).toHaveText(index === 0 ? `/driver/pickups/${uuid(21)}` : `/driver/deliveries/${uuid(22)}`);
+        await expect(page.getByRole('heading', { name: index === 0 ? 'Chi tiết lấy hàng' : 'Chi tiết giao hàng', exact: true })).toBeVisible();
+        assert.equal(notifications[index].readAt, null, 'task opens while mark-read is still pending');
+        releaseRead(); readGate = undefined;
+        await expect.poll(() => notifications[index].readAt).toBeTruthy();
+      }
     }
     await page.screenshot({ path: `test-results/ui-flow/notifications-${width}.png` });
     assert.deepEqual(errors, []);

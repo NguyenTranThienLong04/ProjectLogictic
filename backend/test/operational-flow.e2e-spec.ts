@@ -147,6 +147,42 @@ describe.each([
     return value;
   };
 
+  const assertNotificationTarget = async (
+    actor: 'pickupNear' | 'deliveryNear',
+    type: string,
+    assignmentId: string,
+  ) => {
+    const response = await request(server)
+      .get('/api/v1/notifications')
+      .set('Authorization', `Bearer ${token(actor)}`)
+      .expect(200);
+    const { items } = bodyFrom<{
+      items: Array<{
+        id: string;
+        type: string;
+        data: { assignmentId?: string; shipmentId?: string };
+      }>;
+    }>(response).data;
+    const notification = items.find((item) => item.type === type);
+    expect(notification).toMatchObject({ type, data: { assignmentId, shipmentId } });
+    if (!notification) throw new Error('Assignment notification missing');
+    const markRead = () =>
+      request(server)
+        .patch(`/api/v1/notifications/${notification.id}/read`)
+        .set('Authorization', `Bearer ${token(actor)}`)
+        .expect(200);
+    const first = bodyFrom<{ readAt: string }>(await markRead()).data;
+    expect(first.readAt).toBeTruthy();
+    expect(bodyFrom<{ readAt: string }>(await markRead()).data.readAt).toBe(first.readAt);
+    await request(server)
+      .patch(`/api/v1/notifications/${notification.id}/read`)
+      .set(
+        'Authorization',
+        `Bearer ${token(actor === 'pickupNear' ? 'deliveryNear' : 'pickupNear')}`,
+      )
+      .expect(404);
+  };
+
   const driverId = (emailToProfile: Map<string, string>, actor: keyof typeof actors): string => {
     const value = emailToProfile.get(actors[actor]);
     if (!value) throw new Error(`Missing driver profile for ${actor}`);
@@ -531,6 +567,7 @@ describe.each([
       .send({ driverId: pickupNearId, clientRequestId: randomUUID() })
       .expect(201);
     pickupAssignmentId = bodyFrom<{ id: string }>(assignResponse).data.id;
+    await assertNotificationTarget('pickupNear', 'PICKUP_ASSIGNMENT_CREATED', pickupAssignmentId);
 
     const taskResponse = await request(server)
       .get(`/api/v1/driver/assignments/${pickupAssignmentId}`)
@@ -837,6 +874,11 @@ describe.each([
       .send({ driverId: deliveryNearId, clientRequestId: randomUUID() })
       .expect(201);
     deliveryAssignmentId = bodyFrom<{ id: string }>(assignmentResponse).data.id;
+    await assertNotificationTarget(
+      'deliveryNear',
+      'DELIVERY_ASSIGNMENT_CREATED',
+      deliveryAssignmentId,
+    );
 
     const beforeStartResponse = await request(server)
       .get(`/api/v1/driver/delivery-assignments/${deliveryAssignmentId}`)

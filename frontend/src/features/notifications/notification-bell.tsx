@@ -6,7 +6,6 @@ import { getAccessToken } from '../../services/auth-session';
 import { createOperationsSocket } from '../../services/operations-socket';
 import { listNotifications } from './notification-api';
 import { useOpenNotification } from './use-open-notification';
-import { ErrorSummary } from '../../components/ui/error-summary';
 import { getApiErrorMessage } from '../../services/api-error';
 
 export function NotificationBell() {
@@ -74,7 +73,6 @@ export function NotificationBell() {
             Xem tất cả thông báo
           </Link>
           <h2 className="px-2 py-2 font-semibold text-ink">Thông báo gần đây</h2>
-          <ErrorSummary message={openNotification.isError ? getApiErrorMessage(openNotification.error) : undefined} />
           {notifications.isPending ? (
             <p className="px-2 py-4 text-sm text-muted-foreground">Đang tải…</p>
           ) : notifications.isError ? (
@@ -90,9 +88,7 @@ export function NotificationBell() {
               {notifications.data.items.map((item) => (
                 <li key={item.id}>
                   <button
-                    aria-busy={openNotification.isPending || undefined}
                     className={`focus-ring ui-transition min-h-11 w-full cursor-pointer rounded-control border p-3 text-left transition-colors hover:border-border-strong hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-45 ${item.readAt ? 'border-transparent text-muted-foreground' : 'border-blue-100 bg-blue-50 text-ink'}`}
-                    disabled={openNotification.isPending}
                     onClick={() => openNotification.mutate(item)}
                     type="button"
                   >
@@ -110,6 +106,11 @@ export function NotificationBell() {
           )}
         </section>
       </details>
+      {openNotification.isError ? (
+        <p className="col-span-full basis-full rounded-control border border-red-200 bg-red-50 p-3 text-sm text-red-900" role="status">
+          Thông báo chưa được đánh dấu đã đọc. {getApiErrorMessage(openNotification.error)} Mở lại thông báo để thử lại.
+        </p>
+      ) : null}
     </>
   );
 }

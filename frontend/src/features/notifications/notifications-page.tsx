@@ -46,9 +46,7 @@ export function NotificationsPage() {
       await refresh();
     },
   });
-  const mutationError = openNotification.isError
-    ? getApiErrorMessage(openNotification.error)
-    : markRead.isError
+  const mutationError = markRead.isError
     ? getApiErrorMessage(markRead.error)
     : markAllRead.isError
       ? getApiErrorMessage(markAllRead.error)
@@ -158,7 +156,6 @@ export function NotificationsPage() {
                       {user?.role === 'DRIVER' ? (
                         <button
                           className="focus-ring min-h-12 cursor-pointer rounded-control text-left text-primary hover:underline disabled:opacity-45"
-                          disabled={openNotification.isPending || markRead.isPending || markAllRead.isPending}
                           onClick={() => openNotification.mutate(item)}
                           type="button"
                         >{item.title}</button>
