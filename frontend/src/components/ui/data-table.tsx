@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { AriaAttributes, ReactNode } from 'react';
 import { EmptyState } from './empty-state';
 import { ErrorState } from './error-state';
 import { LoadingState } from './loading-state';
@@ -9,6 +9,7 @@ export interface DataTableColumn<T> {
   mobileLabel?: string;
   align?: 'left' | 'center' | 'right';
   className?: string;
+  ariaSort?: AriaAttributes['aria-sort'];
   render: (row: T) => ReactNode;
 }
 
@@ -25,6 +26,7 @@ interface DataTableProps<T> {
   emptyDescription?: string;
   /** Wide operational tables use cards until desktop and scroll within their own region. */
   wide?: boolean;
+  getRowClassName?: (row: T) => string;
 }
 
 const alignments = {
@@ -45,6 +47,7 @@ export function DataTable<T>({
   onRetry,
   rows,
   wide = false,
+  getRowClassName,
 }: DataTableProps<T>) {
   if (loading) return <LoadingState label={loadingLabel} />;
   if (error) return <ErrorState message={error} onRetry={onRetry} />;
@@ -72,6 +75,7 @@ export function DataTable<T>({
                 key={column.id}
                 role="columnheader"
                 scope="col"
+                aria-sort={column.ariaSort}
               >
                 {column.header}
               </th>
@@ -84,7 +88,7 @@ export function DataTable<T>({
         >
           {rows.map((row) => (
             <tr
-              className={`grid gap-2 rounded-surface border border-border bg-surface p-4 shadow-surface ${wide ? 'lg:table-row lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none' : 'md:table-row md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none'}`}
+              className={`grid gap-2 rounded-surface border border-border bg-surface p-4 shadow-surface ${wide ? 'lg:table-row lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none' : 'md:table-row md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none'} ${getRowClassName?.(row) ?? ''}`}
               key={getRowKey(row)}
               role="row"
             >

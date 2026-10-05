@@ -271,6 +271,17 @@ export class WarehousesController {
     return this.warehousesService.receiveReturn(id, shipmentId, dto, actor, this.context(request));
   }
 
+  @Get(':id/transfers/:transferId')
+  @Roles(UserRole.WAREHOUSE_STAFF, UserRole.DISPATCHER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Read the exact transfer within an authorized warehouse scope' })
+  getTransfer(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('transferId', ParseUUIDPipe) transferId: string,
+  ) {
+    return this.warehousesService.getTransfer(id, transferId, actor);
+  }
+
   @Get(':id/transfers')
   @Roles(UserRole.WAREHOUSE_STAFF, UserRole.DISPATCHER, UserRole.ADMIN)
   @ApiOperation({ summary: 'List transfers of a warehouse' })

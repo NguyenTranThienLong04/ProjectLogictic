@@ -42,6 +42,17 @@ export async function getWarehouse<T extends WarehouseCatalogueItem = Warehouse>
   return response.data.data;
 }
 
+export async function getWarehouseTransfer(
+  warehouseId: string,
+  transferId: string,
+): Promise<WarehouseTransfer> {
+  return (
+    await api.get<ApiEnvelope<WarehouseTransfer>>(
+      `/warehouses/${warehouseId}/transfers/${transferId}`,
+    )
+  ).data.data;
+}
+
 export async function createWarehouse(input: {
   code: string;
   name: string;

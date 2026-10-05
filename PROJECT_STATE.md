@@ -1,5 +1,11 @@
 # Current Phase
 
+Control Tower staging validation — 2026-10-06: **BLOCKED**. Fresh Live backend/frontend both `6354dc6b157438ce9176499c4b24fa70e9f6f017`; health/version + release.json PASS, but this release has no Control Tower (API 404, Admin/Dispatcher bundles omit route). Feature remains uncommitted locally. Linux/Node 22 isolated clean snapshot lint/typecheck/unit 511+72/build/provenance PASS; full CI and Live acceptance UNVERIFIED. No deployment/migration/reset/seed/business mutation. Report: `docs/CONTROL_TOWER_STAGING_20261006.md`.
+
+Control Tower + SLA/Aging — 2026-10-06: local implementation complete for Admin/Dispatcher. Single PostgreSQL read snapshot, configurable stage SLA, history-derived aging, scoped exact Transfer detail and responsive priority dashboard. Unit 511 backend / 72 frontend; Control Tower PostgreSQL 7/7; existing regression 65/65 across split runs; responsive browser matrix, lint/typecheck/build PASS. No migration/deploy; Node 22/Linux CI and staging not run. Report: `docs/CONTROL_TOWER_SLA_AGING_20261006.md`.
+
+Driver notification staging verification — 2026-10-06: PASS on served frontend SHA `6354dc6b157438ce9176499c4b24fa70e9f6f017`; `/release.json` JSON and embedded bundle identity agree. Real Driver dropdown/center Pickup + Delivery: handler/resolver/navigation/router/detail HTTP 200 PASS (4/4); real center delayed/failed mark-read PASS (4/4); local resolver/fallback tests 2/2. No new defect reproduced, no product/backend/deploy changes. Two existing notifications marked read through UI checks. User reports strict no-Trip PASS; Line-haul untouched. Evidence: `docs/DRIVER_NOTIFICATION_STAGING_20261006.md`. Supersedes the older notification deployment/session blockers below for this tested build/account.
+
 Staging final validation — 2026-10-05, 13:37 ICT: NOTIFICATION BLOCKED / STRICT LINE-HAUL BLOCKED. Fresh hard reload confirms old bundle; Live SHAs UNKNOWN, 24/24 notification metadata valid. Manual Trip `LHT-20261005-ED4148` → ARRIVED → transfer COMPLETED verified via API/DB/audit, closing the earlier canonical blocker. Cutover/restart now explicitly authorized but NOT EXECUTED: Render access unavailable; Live transfer contract lacks enforcement fields; Driver sessions expired. No product/env/deploy/business write/migration/reset/seed. Evidence: `docs/STAGING_FINAL_VALIDATION_20261005.md`.
 
 Staging notification/line-haul verification — 2026-10-05, 00:21 ICT: old frontend entry `index-BGj12pP4.js` confirmed after cache-disabled hard reload; exact Live SHA UNKNOWN, fixed-source mismatch persists. Notification DB metadata 22/22 correct; real Driver matrix blocked by expired sessions. Created one AVAILABLE staging test Vehicle `STG-SG01-SG02-20261005` through Admin API and verified eligibility/UI/audit/DB. SG01_TX01 LINE_HAUL eligible, but no origin inventory/pending transfer for canonical A→B. Raw Render cutover env UNKNOWN (local empty; observed Live standalone compatibility); no env/deploy/migration/reset/seed/SQL writes. READY FOR CUTOVER NO. Evidence: `docs/STAGING_NOTIFICATION_LINEHAUL_20261005.md`.
@@ -15,6 +21,12 @@ Logistics canonical flow local implementation — 2026-10-04: delivery confirmat
 Phase 1 release closure implementation — 2026-10-03: FUNCTIONAL PASS; RELEASE INTEGRITY BLOCKED; READY FOR STAGING DEPLOY NO. Online dependency audit 9→0 (production 8→0), no runtime HIGH/waivers. Exact H2/H3 exception passes read-only staging 26/26; all other migrations strict. Backend/frontend provenance and full SMTP sandbox E2E implemented. Clean Node 22/Linux CI and production containers PASS on local snapshot 644f3174ec0073e5fe42c540f3edc77cdda4219c. Staging email intent/config remains UNKNOWN per user; no delivery waiver. Hosted CI/current Render Live identity not verified for these changes. No staging migration/reset/history rewrite or deploy. Evidence: docs/PHASE1_RELEASE_CLOSURE_IMPLEMENTATION_20261003.md; supersedes earlier implementation gaps below.
 
 # Completed
+
+- Control Tower validation-only follow-up (2026-10-06): verified Live release identity and missing-feature blocker with cache-busted public GETs; isolated offline Linux Node 22.23.2 / npm 11.18.0 clean snapshot checks PASS, 583 unit tests. No staging feature acceptance or full CI PASS claimed. Evidence: `docs/CONTROL_TOWER_STAGING_20261006.md`.
+
+- Control Tower (2026-10-06): backend-authoritative ON_TIME/AT_RISK/OVERDUE, safe null timestamp handling, combined summary/priority pagination and filters, Admin/Dispatcher UI with exact Shipment/Transfer/Trip links. Effective default SLA 8h/12h/24h/12h/8h, at-risk 80%, aging alert 6h; read-only lifecycle projection, no schema/dependency/state-machine changes. Evidence/limits: `docs/CONTROL_TOWER_SLA_AGING_20261006.md`.
+
+- Driver notification Live verification (2026-10-06): exact release/bundle `6354dc6`; user-authenticated Driver; CDP hook logpoints, router pushState, exact detail heading/API prove dropdown and center deep links. Slow/failing read does not block navigation; no JS exception. Evidence and scope: `docs/DRIVER_NOTIFICATION_STAGING_20261006.md`.
 
 - Staging final validation (2026-10-05 13:37 ICT): authenticated Admin/API and read-only DB verify manual canonical Trip/manifest/schedule/READY/depart/ARRIVED/destination receive with audit IDs; 24/24 Driver notification metadata correct. Fresh cache-disabled browser confirms old notification artifacts. Preserved legacy standalone IN_TRANSIT for post-cutover test; no product/business mutation. Report: `docs/STAGING_FINAL_VALIDATION_20261005.md`.
 
@@ -287,6 +299,8 @@ Phase 1 release closure implementation — 2026-10-03: FUNCTIONAL PASS; RELEASE 
 
 # In Progress
 
+- Control Tower staging acceptance is blocked on a release containing the local implementation. Current Live `6354dc6` predates the feature; authenticated role/data/SLA/UI/deep-link/regression matrix has not run. No new deployment is authorized by the current validation-only task.
+
 - 2026-10-05 13:37 ICT staging gates: frontend still old; both Live SHAs UNKNOWN; Render access unavailable and raw enforcement env unverified; both saved Driver sessions invalid. Manual canonical Trip PASS now verified, superseding earlier no-Trip/canonical blockers. No new origin inventory/pending transfer for the post-cutover matrix. User authorized strict cutover/restart; execution awaits deployment access, not further approval. Strict and legacy post-cutover checks NOT RUN.
 
 - Staging preparation gates (2026-10-04 23:12 ICT): exact fix SHA is now published to release branch; main remains `68869cbc`. Await both Render services at `cade37c4`, owned DRIVER access, and vehicle plate/type/capacity. Driver capability gap resolved; Fleet still empty. Notification issue stays open; no A→B/GPS/negative/legacy staging PASS. CLI readiness P2028 is recorded separately from successful authenticated inventory. This supersedes the older zero-LINE_HAUL-driver inventory below.
@@ -318,6 +332,8 @@ Phase 1 release closure implementation — 2026-10-03: FUNCTIONAL PASS; RELEASE 
 
 # Next
 
+- Control Tower: obtain the committed/deployed feature SHA, confirm both Live services and bundles, then resume authorized staging validation with Admin/Dispatcher and negative-role sessions. Full CI remains unverified because its migration/integration fixture steps were excluded by the current no migration/reset/seed restriction; isolated Linux/Node 22 checks passed. Confirm operational SLA thresholds. No migration required or deployment performed in this task.
+
 - Resume final validation with Render access: establish backend enforcement build, choose current UTC timestamp, set `LINE_HAUL_ENFORCEMENT_FROM`, restart/redeploy without migration, verify effective value and new-transfer rejection/canonical matrix, then legacy receive. Cutover/restart is already authorized by the latest user request, superseding older keep-unset instructions below. Obtain normal Driver access for fresh shipment pickup and notification/F5 checks once the fixed frontend is served. Preserve legacy `TRF-MUSKE729-PAEL` until enforcement is verified.
 
 - User-required gate first: after both Render services serve `cade37c4e16b1f1c0cde8af8c735f9b0624c11aa`, recheck public release SHA/health/bundle and hard reload. If identity fails, stop and report deploy wiring mismatch; do not continue notification/resource/trip/legacy actions. Strict remains OFF.
@@ -348,6 +364,8 @@ Phase 1 release closure implementation — 2026-10-03: FUNCTIONAL PASS; RELEASE 
 - Phase F intentionally covers Chromium behavior rather than pixel-perfect or Firefox/WebKit visual regression. The hosted development PostgreSQL showed variable latency, so the deterministic final browser run used a disposable local PostgreSQL 17 database; a combined backend E2E invocation also requires an isolated Redis DB to avoid consuming the product's global `100 requests / 60 seconds` test-IP budget.
 
 # Important Decisions
+
+- Control Tower uses existing PostgreSQL lifecycle/history and one database clock per snapshot. SLA policy is centralized and operational (24/7); same-stage reassignment never resets SLA. Unknown/inconsistent timestamps remain null and visible as exceptions. Trip PLANNED/READY and exception/return states have aging only; no guessed SLA or separate exception-resolution state machine.
 
 - 2026-10-03 closure implementation: no dependency waivers; Engine.IO patched within its existing parent range. Legacy checksum acceptance is explicit and limited to exact target/IDs/historical/current hashes; mutation job remains strict, ledger untouched. Release identity comes only from validated build/platform sources; local snapshot is labeled separately from GitHub/Render. Full real SMTP sandbox PASS does not turn user-confirmed staging UNKNOWN into an intentional disabled-email exception. No staging deploy.
 

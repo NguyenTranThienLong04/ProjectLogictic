@@ -1,4 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { LoadingState } from '../../components/ui/loading-state';
+import { TransferDetailPage } from '../../features/warehouses/pages/transfer-detail-page';
 import { DispatcherDriverMapPage } from '../../features/locations/dispatcher-driver-map-page';
 import { LineHaulOperationsMapPage } from '../../features/locations/line-haul-operations-map-page';
 import { LineHaulTripDetailPage } from '../../features/line-haul/line-haul-trip-detail-page';
@@ -16,10 +19,28 @@ import {
 } from '../../features/operations/operational-shipments-page';
 import { OperationalShipmentDetailPage } from '../../features/operations/operational-shipment-detail-page';
 
+const ControlTowerPage = lazy(() =>
+  import('../../features/control-tower/control-tower-page').then((module) => ({
+    default: module.ControlTowerPage,
+  })),
+);
+
 export function DispatcherRoutes() {
   return (
     <Routes>
       <Route element={<DispatcherDashboardPage />} path="/dispatcher/dashboard" />
+      <Route
+        element={
+          <Suspense fallback={<LoadingState label="Đang tải Control Tower" />}>
+            <ControlTowerPage role="dispatcher" />
+          </Suspense>
+        }
+        path="/dispatcher/control-tower"
+      />
+      <Route
+        element={<TransferDetailPage role="dispatcher" />}
+        path="/dispatcher/warehouses/:warehouseId/transfers/:id"
+      />
       <Route element={<DispatcherShipmentsPage />} path="/dispatcher/shipments" />
       <Route
         element={<OperationalShipmentDetailPage role="dispatcher" />}

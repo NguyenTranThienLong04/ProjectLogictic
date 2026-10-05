@@ -36,6 +36,7 @@ const primaryNavigation: Record<UserRole, NavigationItem[]> = {
   ],
   DISPATCHER: [
     { label: 'Dashboard', to: '/dispatcher/dashboard' },
+    { label: 'Control Tower', to: '/dispatcher/control-tower' },
     { label: 'Vận đơn', to: '/dispatcher/shipments' },
     { label: 'Lấy hàng', to: '/dispatcher/pickups' },
     { label: 'Giao hàng', to: '/dispatcher/deliveries' },
@@ -43,6 +44,7 @@ const primaryNavigation: Record<UserRole, NavigationItem[]> = {
   ],
   ADMIN: [
     { label: 'Dashboard', to: '/admin/dashboard' },
+    { label: 'Control Tower', to: '/admin/control-tower' },
     { label: 'Vận đơn', to: '/admin/shipments' },
     { label: 'Người dùng', to: '/admin/users' },
     { label: 'Analytics', to: '/admin/analytics' },

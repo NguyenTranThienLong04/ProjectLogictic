@@ -20,6 +20,13 @@ import { AuditLogsPage } from '../../features/admin/audit-logs-page';
 import { AdminShipmentsPage } from '../../features/operations/operational-shipments-page';
 import { OperationalShipmentDetailPage } from '../../features/operations/operational-shipment-detail-page';
 import { AdminShippingFeeReconciliationPage } from '../../features/shipping-fees/admin-shipping-fee-reconciliation-page';
+import { TransferDetailPage } from '../../features/warehouses/pages/transfer-detail-page';
+
+const ControlTowerPage = lazy(() =>
+  import('../../features/control-tower/control-tower-page').then((module) => ({
+    default: module.ControlTowerPage,
+  })),
+);
 
 const AdminAnalyticsPage = lazy(() =>
   import('../../features/analytics/admin-analytics-page').then((module) => ({
@@ -31,6 +38,18 @@ export function AdminRoutes() {
   return (
     <Routes>
       <Route element={<AdminDashboardPage />} path="/admin/dashboard" />
+      <Route
+        element={
+          <Suspense fallback={<LoadingState label="Đang tải Control Tower" />}>
+            <ControlTowerPage role="admin" />
+          </Suspense>
+        }
+        path="/admin/control-tower"
+      />
+      <Route
+        element={<TransferDetailPage role="admin" />}
+        path="/admin/warehouses/:warehouseId/transfers/:id"
+      />
       <Route element={<AdminShipmentsPage />} path="/admin/shipments" />
       <Route element={<OperationalShipmentDetailPage role="admin" />} path="/admin/shipments/:id" />
       <Route element={<AdminUsersPage />} path="/admin/users" />

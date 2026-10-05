@@ -1163,6 +1163,27 @@ export class WarehousesService {
     };
   }
 
+  async getTransfer(
+    warehouseId: string,
+    transferId: string,
+    actor: AuthenticatedUser,
+  ): Promise<WarehouseTransferResponse> {
+    await this.assertStaffWarehouseScope(actor, warehouseId);
+    const transfer = await this.prisma.warehouseTransfer.findFirst({
+      where: {
+        id: transferId,
+        OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }],
+      },
+      include: warehouseTransferResponseInclude,
+    });
+    if (!transfer)
+      throw new NotFoundException({
+        code: 'TRANSFER_NOT_FOUND',
+        message: 'Transfer not found in this warehouse',
+      });
+    return toWarehouseTransferResponse(transfer, this.transferFlowPolicy);
+  }
+
   async listTransfers(
     warehouseId: string,
     direction: 'inbound' | 'outbound' | 'all' = 'all',
