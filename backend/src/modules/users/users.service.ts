@@ -14,12 +14,14 @@ import type { CreateStaffDto } from './dto/create-staff.dto.js';
 import type { ListUsersDto } from './dto/list-users.dto.js';
 import type { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UserResponse } from './user.response.js';
+import { DriverTaskOwnershipService } from '../assignments/driver-task-ownership.service.js';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly passwordHasher: PasswordHasherService,
+    private readonly driverOwnership: DriverTaskOwnershipService,
   ) {}
 
   async getProfile(userId: string): Promise<UserResponse> {
@@ -169,7 +171,7 @@ export class UsersService {
     context: ClientContext,
   ): Promise<UserResponse> {
     const user = await this.prisma.$transaction(async (transaction) => {
-      const current = await transaction.user.findUnique({
+      let current = await transaction.user.findUnique({
         where: { id: userId },
         include: { driverProfile: true },
       });
@@ -177,6 +179,13 @@ export class UsersService {
         throw new NotFoundException({
           code: 'USER_NOT_FOUND',
           message: 'User was not found',
+        });
+      }
+      if (status === UserStatus.SUSPENDED && current.driverProfile) {
+        await this.driverOwnership.lock(transaction, current.driverProfile.id);
+        current = await transaction.user.findUniqueOrThrow({
+          where: { id: userId },
+          include: { driverProfile: true },
         });
       }
       if (current.id === actor.id && status === UserStatus.SUSPENDED) {

@@ -638,7 +638,8 @@ describe('WarehousesService', () => {
         ),
       ).rejects.toMatchObject({ response: { code: 'IDEMPOTENCY_KEY_REUSED' } });
 
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.warehouseTransfer.create).not.toHaveBeenCalled();
+      expect(prisma.auditLog.create).not.toHaveBeenCalled();
     });
 
     it('creates a pending inter-warehouse transfer without moving the shipment', async () => {

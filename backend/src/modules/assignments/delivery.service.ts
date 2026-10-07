@@ -42,6 +42,37 @@ type DeliveryAssignment = Prisma.DriverAssignmentGetPayload<{
   include: typeof deliveryAssignmentInclude;
 }>;
 
+// Preserve the shipment response fields without exposing authorization relations.
+const startReturnShipmentSelect = {
+  id: true,
+  trackingCode: true,
+  clientRequestId: true,
+  customerId: true,
+  senderSnapshot: true,
+  receiverSnapshot: true,
+  pickupSnapshot: true,
+  deliverySnapshot: true,
+  packageSnapshot: true,
+  pricingSnapshot: true,
+  codAmount: true,
+  totalFee: true,
+  shippingFeePayer: true,
+  status: true,
+  version: true,
+  originWarehouseId: true,
+  destinationWarehouseId: true,
+  currentWarehouseId: true,
+  returnWarehouseId: true,
+  cancelledById: true,
+  cancelledAt: true,
+  cancellationReason: true,
+  cancellationPreviousStatus: true,
+  confirmedAt: true,
+  pickedUpAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.ShipmentSelect;
+
 @Injectable()
 export class DeliveryService {
   constructor(
@@ -616,17 +647,28 @@ export class DeliveryService {
     const shipment = await this.prisma.$transaction(async (tx) => {
       const current = await tx.shipment.findUnique({
         where: { id: shipmentId },
-        include: {
+        select: {
+          id: true,
+          trackingCode: true,
+          customerId: true,
+          status: true,
+          version: true,
           deliveryAttempts: {
             orderBy: { attemptNumber: 'desc' },
             take: 1,
-            include: { driver: { include: { user: true } } },
+            select: {
+              id: true,
+              driverAssignmentId: true,
+              status: true,
+              completedAt: true,
+              driver: {
+                select: { userId: true, status: true, user: { select: { status: true } } },
+              },
+            },
           },
         },
       });
       if (!current) throw this.notFound('SHIPMENT_NOT_FOUND', 'Shipment was not found');
-      if (current.status === ShipmentStatus.RETURN_IN_TRANSIT) return current;
-      this.transitionPolicy.assertReturnStartable(current.status);
       const attempt = current.deliveryAttempts[0];
       if (
         !attempt ||
@@ -652,6 +694,12 @@ export class DeliveryService {
           'RETURN_OWNERSHIP_SUPERSEDED',
           'A newer active assignment owns this shipment',
         );
+      if (current.status === ShipmentStatus.RETURN_IN_TRANSIT)
+        return tx.shipment.findUniqueOrThrow({
+          where: { id: current.id },
+          select: startReturnShipmentSelect,
+        });
+      this.transitionPolicy.assertReturnStartable(current.status);
       const result = await tx.shipment.updateMany({
         where: {
           id: current.id,
@@ -690,7 +738,10 @@ export class DeliveryService {
           data: { shipmentId: current.id },
         },
       ]);
-      return tx.shipment.findUniqueOrThrow({ where: { id: current.id } });
+      return tx.shipment.findUniqueOrThrow({
+        where: { id: current.id },
+        select: startReturnShipmentSelect,
+      });
     });
     await this.notifications.publishByEventKeys([`shipment:${shipmentId}:return-started`]);
     await this.notifications.publishShipmentUpdated(shipmentId, ShipmentStatus.RETURN_IN_TRANSIT);

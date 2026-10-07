@@ -41,6 +41,8 @@
     "20260907100000_phase_h1_shipping_fee_collection": "98a5e43cbc5d63bfcfeb087009d07a9f26994385f652c892bcc1a68d1da3060f",
     "20260907170000_phase_h2_shipping_fee_reconciliation": "4c8b9dd70fbacfbc53be24045a62d67c3a8d59a882b4c77a8075704792b01adb",
     "20260907210000_phase_h3_shipping_fee_online_payment": "8324e237ba9afd159bb78dcda6a06cf75f238bdef221dac1c86eefe816a21228",
-    "20260927120000_cod_handover_manual_payout": "ed509b52a3253300115899fa06043c82ab1cb04c0243266e9b7b102657fe2fae"
+    "20260927120000_cod_handover_manual_payout": "ed509b52a3253300115899fa06043c82ab1cb04c0243266e9b7b102657fe2fae",
+    "20261007120000_notification_delivery_outbox": "63958af5056d890960942af346034e7729e25ce0546ec5b58c3bb78a2d21f196",
+    "20261007180000_notification_historical_email_cutover": "1490a77667b28874b44f0d634ab56f9646e1ea890b555592c9289ebeacffa81a"
   }
 }

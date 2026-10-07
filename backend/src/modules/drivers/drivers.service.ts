@@ -20,6 +20,7 @@ import type { ListDriversDto } from './dto/list-drivers.dto.js';
 import type { UpdateDriverProfileDto } from './dto/update-driver-profile.dto.js';
 import type { SetDriverCapabilitiesDto } from './dto/set-driver-capabilities.dto.js';
 import { executingLineHaulTripStatuses } from '../line-haul/line-haul.constants.js';
+import { DriverTaskOwnershipService } from '../assignments/driver-task-ownership.service.js';
 import {
   toDriverResponse,
   type DriverResponse,
@@ -28,7 +29,10 @@ import {
 
 @Injectable()
 export class DriversService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly driverOwnership: DriverTaskOwnershipService,
+  ) {}
 
   async create(
     actor: AuthenticatedUser,
@@ -175,6 +179,7 @@ export class DriversService {
     context: ClientContext,
   ): Promise<DriverResponse> {
     const profile = await this.prisma.$transaction(async (transaction) => {
+      if (dto.suspended === true) await this.driverOwnership.lock(transaction, profileId);
       const current = await transaction.driverProfile.findUnique({
         where: { id: profileId },
         include: { user: true, operatingWarehouse: true },
@@ -289,6 +294,7 @@ export class DriversService {
     context: ClientContext,
   ): Promise<DriverResponse> {
     const profile = await this.prisma.$transaction(async (transaction) => {
+      await this.driverOwnership.lock(transaction, profileId);
       const current = await transaction.driverProfile.findUnique({
         where: { id: profileId },
         include: { user: true, operatingWarehouse: true },

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, UserRole } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import { ListCodDto } from './dto/list-cod.dto.js';
 import type { AuthenticatedUser, ClientContext } from '../auth/auth.types.js';
 import type {
   CodReasonDto,
@@ -392,34 +393,67 @@ export class CodService {
     return shipment.codTransaction;
   }
 
-  async mine(actor: AuthenticatedUser) {
+  async mine(actor: AuthenticatedUser, query = new ListCodDto()) {
     this.requireRole(actor, UserRole.DRIVER);
     const driver = await this.prisma.driverProfile.findUnique({ where: { userId: actor.id } });
     if (!driver) throw this.notFound();
-    return this.dashboard({ collectedByDriverId: driver.id }, false);
+    if (query.payoutStatus) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Payout filters require Admin access',
+      });
+    }
+    return this.list(query, { collectedByDriverId: driver.id }, false);
   }
 
-  async dashboard(where: Prisma.CODTransactionWhereInput = {}, includePayout = true) {
-    const [items, summary] = await Promise.all([
-      this.prisma.cODTransaction.findMany({
-        where,
-        include: {
-          shipment: { select: { trackingCode: true, customer: { select: { fullName: true } } } },
-          collectedByDriver: { select: { user: { select: { fullName: true } } } },
-          remittances: { orderBy: { submittedAt: 'desc' } },
-          payout: includePayout,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      }),
-      this.prisma.cODTransaction.groupBy({
-        where,
-        by: ['status'],
-        _sum: { expectedAmount: true },
-        _count: { _all: true },
-      }),
-    ]);
-    return { items, summary };
+  async dashboard(query = new ListCodDto()) {
+    return this.list(query, {}, true);
+  }
+
+  private async list(
+    query: ListCodDto,
+    scope: Prisma.CODTransactionWhereInput,
+    includePayout: boolean,
+  ) {
+    const { page, limit, status, payoutStatus } = query;
+    const where: Prisma.CODTransactionWhereInput = {
+      ...scope,
+      ...(status ? { status } : {}),
+      ...(payoutStatus
+        ? { payout: payoutStatus === 'NONE' ? { is: null } : { is: { status: payoutStatus } } }
+        : {}),
+    };
+    return this.prisma.$transaction(
+      async (tx) => {
+        const [items, total, summary] = await Promise.all([
+          tx.cODTransaction.findMany({
+            where,
+            include: {
+              shipment: {
+                select: { trackingCode: true, customer: { select: { fullName: true } } },
+              },
+              collectedByDriver: { select: { user: { select: { fullName: true } } } },
+              remittances: { orderBy: { submittedAt: 'desc' } },
+              payout: includePayout,
+            },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            skip: (page - 1) * limit,
+            take: limit,
+          }),
+          tx.cODTransaction.count({ where }),
+          tx.cODTransaction.groupBy({
+            // Operational totals cover every scoped record, independent of page/list filters.
+            where: scope,
+            by: ['status'],
+            orderBy: { status: 'asc' },
+            _sum: { expectedAmount: true },
+            _count: { _all: true },
+          }),
+        ]);
+        return { items, summary, page, limit, total, totalPages: Math.ceil(total / limit) };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
   }
 
   private async lock(tx: Prisma.TransactionClient, id: string) {

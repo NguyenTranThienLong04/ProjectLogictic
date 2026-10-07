@@ -84,6 +84,10 @@ export class DriverDeliveriesController {
   @ApiOperation({
     summary: "Start return for the authenticated driver's latest failed delivery attempt",
   })
+  @ApiOkResponse({
+    description:
+      'Shipment fields without driver/user relations; retries revalidate ownership and return the same projection',
+  })
   startReturn(
     @CurrentUser() actor: AuthenticatedUser,
     @Param('shipmentId', ParseUUIDPipe) shipmentId: string,

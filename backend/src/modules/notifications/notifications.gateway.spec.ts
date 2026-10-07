@@ -44,13 +44,66 @@ function socketFixture(role = 'DISPATCHER') {
       driverAssignment: { findFirst },
     } as never,
   );
+  const fetchSockets = jest.fn(() => Promise.resolve([client]));
   const to = jest.fn(() => ({
-    fetchSockets: () => Promise.resolve([client]),
+    fetchSockets,
     socketsLeave: jest.fn(),
   }));
   (gateway as unknown as { server: unknown }).server = { in: to };
-  return { gateway, client, session, findFirst, findUnique, to, emit: client.emit };
+  return { gateway, client, session, findFirst, findUnique, fetchSockets, to, emit: client.emit };
 }
+
+describe('NotificationsGateway durable notification delivery', () => {
+  const notification = { id: 'notification-1', userId: 'user-1' } as never;
+
+  it('emits to an authorized socket and accepts an empty offline room', async () => {
+    const { gateway, client, fetchSockets } = socketFixture();
+    await gateway.emitNotification(notification);
+    expect(client.emit).toHaveBeenCalledWith(
+      'notification.created',
+      expect.objectContaining({ id: 'notification-1' }),
+    );
+    fetchSockets.mockResolvedValue([]);
+    await expect(gateway.emitNotification(notification)).resolves.toBeUndefined();
+  });
+
+  it('propagates fetchSockets failures to the outbox worker', async () => {
+    const { gateway, fetchSockets } = socketFixture();
+    fetchSockets.mockRejectedValue(new Error('socket adapter unavailable'));
+    await expect(gateway.emitNotification(notification)).rejects.toThrow(
+      'socket adapter unavailable',
+    );
+  });
+
+  it('propagates authorization infrastructure failures while failing closed', async () => {
+    const { gateway, client, findUnique } = socketFixture();
+    findUnique.mockRejectedValue(new Error('database unavailable'));
+    await expect(gateway.emitNotification(notification)).rejects.toThrow('database unavailable');
+    expect(client.emit).not.toHaveBeenCalled();
+    expect(client.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('propagates socket emit failures', async () => {
+    const { gateway, client } = socketFixture();
+    client.emit.mockImplementation(() => {
+      throw new Error('socket emit failed');
+    });
+    await expect(gateway.emitNotification(notification)).rejects.toThrow('socket emit failed');
+  });
+
+  it('skips revoked sessions without treating authorization denial as infrastructure failure', async () => {
+    const { gateway, client, session } = socketFixture();
+    session.revokedAt = new Date();
+    await expect(gateway.emitNotification(notification)).resolves.toBeUndefined();
+    expect(client.emit).not.toHaveBeenCalled();
+    expect(client.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('does not acknowledge notification delivery before the gateway is initialized', async () => {
+    const gateway = new NotificationsGateway({} as never, {} as never, {} as never);
+    await expect(gateway.emitNotification(notification)).rejects.toThrow('unavailable');
+  });
+});
 
 describe('NotificationsGateway driver location broadcast', () => {
   it('broadcasts operations and only the explicitly authorized shipment rooms', async () => {

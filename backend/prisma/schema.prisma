@@ -763,9 +763,30 @@ model Notification {
   emailLastError String?   @db.VarChar(500)
   createdAt      DateTime  @default(now()) @db.Timestamptz(3)
   user           User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deliveries     NotificationDelivery[]
 
   @@unique([userId, eventKey])
   @@index([userId, readAt, createdAt])
+}
+
+enum NotificationDeliveryChannel {
+  REALTIME
+  EMAIL
+}
+
+model NotificationDelivery {
+  notificationId  String                      @db.Uuid
+  channel         NotificationDeliveryChannel
+  enqueuedAt      DateTime?                   @db.Timestamptz(3)
+  completedAt     DateTime?                   @db.Timestamptz(3)
+  skippedReason   String?                     @db.VarChar(50)
+  nextAttemptAt   DateTime                    @default(now()) @db.Timestamptz(3)
+  enqueueAttempts Int                         @default(0)
+  lastError       String?                     @db.VarChar(500)
+  notification    Notification                @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, channel])
+  @@index([completedAt, nextAttemptAt])
 }
 
 model TrackingEvent {

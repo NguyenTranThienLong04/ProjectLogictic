@@ -25,13 +25,15 @@ describe('CodService concurrency guards', () => {
     const findUnique = jest.fn(() => Promise.resolve({ id: driverProfileId }));
     const findMany = jest.fn(() => Promise.resolve([]));
     const groupBy = jest.fn(() => Promise.resolve([]));
+    const count = jest.fn(() => Promise.resolve(0));
+    const tx = { cODTransaction: { findMany, groupBy, count } };
     const prisma = {
       driverProfile: { findUnique },
-      cODTransaction: { findMany, groupBy },
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
     } as unknown as PrismaService;
     await new CodService(prisma).mine(driverActor);
     expect(findUnique).toHaveBeenCalledWith({ where: { userId: driverActor.id } });
-    for (const query of [findMany, groupBy]) {
+    for (const query of [findMany, groupBy, count]) {
       expect(query).toHaveBeenCalledWith(
         expect.objectContaining({ where: { collectedByDriverId: driverProfileId } }),
       );

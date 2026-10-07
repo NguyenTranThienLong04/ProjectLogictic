@@ -77,7 +77,8 @@ test('H2 and H3 historical hashes cannot be swapped or reused for another migrat
 });
 
 test('a new migration remains strict when legacy H2/H3 exceptions are active', () => {
-  const name = '20261003000000_new_migration';
+  const latestTimestamp = Object.keys(canonical.migrations).sort().at(-1).slice(0, 14);
+  const name = `${BigInt(latestTimestamp) + 1n}_new_migration`;
   const next = { ...canonical, migrations: { ...canonical.migrations, [name]: sha256('new SQL') } };
   compareBaseline(next, canonical);
   const newRow = { migration_name: name, checksum: next.migrations[name], finished_at: new Date(), rolled_back_at: null };

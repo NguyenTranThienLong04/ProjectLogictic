@@ -42,6 +42,24 @@ function bodyFrom<T>(response: Response): ApiEnvelope<T> {
   return body as ApiEnvelope<T>;
 }
 
+function expectNoSensitiveFields(value: unknown): void {
+  if (!value || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    value.forEach(expectNoSensitiveFields);
+    return;
+  }
+  for (const [key, nested] of Object.entries(value)) {
+    expect(key).not.toMatch(/password|token|secret|session/i);
+    expectNoSensitiveFields(nested);
+  }
+}
+
+function expectReturnOwnershipRejected(response: Response): void {
+  expect(response.body).toMatchObject({ statusCode: 404, code: 'RETURN_ATTEMPT_NOT_FOUND' });
+  expect(response.body).not.toHaveProperty('data');
+  expectNoSensitiveFields(response.body);
+}
+
 describe('Phase 5 Last-Mile return workflow (e2e)', () => {
   let app: INestApplication;
   let server: Server;
@@ -339,10 +357,15 @@ describe('Phase 5 Last-Mile return workflow (e2e)', () => {
       ShipmentStatus.RETURN_REQUESTED,
     );
 
-    await request(server)
+    const rejectedBefore = await request(server)
       .post(`/api/v1/driver/delivery-assignments/${shipmentId}/start-return`)
       .set('Authorization', `Bearer ${otherDriverToken}`)
       .expect(404);
+    expectReturnOwnershipRejected(rejectedBefore);
+    expect(await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })).toMatchObject({
+      status: ShipmentStatus.RETURN_REQUESTED,
+      version: bodyFrom<{ version: number }>(requested).data.version,
+    });
 
     const started = await request(server)
       .post(`/api/v1/driver/delivery-assignments/${shipmentId}/start-return`)
@@ -354,13 +377,34 @@ describe('Phase 5 Last-Mile return workflow (e2e)', () => {
       status: ShipmentStatus.RETURN_IN_TRANSIT,
       currentWarehouseId: null,
     });
-    await request(server)
+    expectNoSensitiveFields(started.body);
+    expect(bodyFrom<unknown>(started).data).not.toHaveProperty('deliveryAttempts');
+    const committed = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } });
+
+    const retried = await request(server)
       .post(`/api/v1/driver/delivery-assignments/${shipmentId}/start-return`)
       .set('Authorization', `Bearer ${driverToken}`)
       .expect(200);
+    expect(bodyFrom<unknown>(retried).data).toEqual(bodyFrom<unknown>(started).data);
+    expectNoSensitiveFields(retried.body);
+
+    const rejectedAfter = await request(server)
+      .post(`/api/v1/driver/delivery-assignments/${shipmentId}/start-return`)
+      .set('Authorization', `Bearer ${otherDriverToken}`)
+      .expect(404);
+    expectReturnOwnershipRejected(rejectedAfter);
+    expect(await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })).toEqual(
+      committed,
+    );
     expect(
       await prisma.trackingEvent.count({
         where: { shipmentId, status: ShipmentStatus.RETURN_IN_TRANSIT },
+      }),
+    ).toBe(1);
+
+    expect(
+      await prisma.notification.count({
+        where: { eventKey: `shipment:${shipmentId}:return-started` },
       }),
     ).toBe(1);
     expect(

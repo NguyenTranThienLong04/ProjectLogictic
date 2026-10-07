@@ -6,6 +6,9 @@ import { DriverStatus, UserRole, UserStatus } from '../../generated/prisma/clien
 import type { PrismaService } from '../../database/prisma.service.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
 import { DriversService } from './drivers.service.js';
+import { DriverTaskOwnershipService } from '../assignments/driver-task-ownership.service.js';
+
+const driverOwnership = new DriverTaskOwnershipService();
 
 const driverUserId = '29bb510a-c663-4bfe-99da-d0e6ac69fc14';
 const actor: AuthenticatedUser = {
@@ -93,7 +96,7 @@ describe('DriversService', () => {
         callback(transaction),
       ),
     } as unknown as PrismaService;
-    const result = await new DriversService(prisma).create(
+    const result = await new DriversService(prisma, driverOwnership).create(
       actor,
       {
         userId: driverUserId,
@@ -149,7 +152,7 @@ describe('DriversService', () => {
         callback(transaction),
       ),
     } as unknown as PrismaService;
-    const result = await new DriversService(prisma).update(
+    const result = await new DriversService(prisma, driverOwnership).update(
       actor,
       current.id,
       { operatingWarehouseId: warehouse.id },
@@ -167,7 +170,7 @@ describe('DriversService', () => {
     const findMany = jest.fn(() => Promise.resolve([]));
     const count = jest.fn(() => Promise.resolve(23));
     const prisma = { driverProfile: { findMany, count } } as unknown as PrismaService;
-    const result = await new DriversService(prisma).list({
+    const result = await new DriversService(prisma, driverOwnership).list({
       search: '  driver  ',
       capability: 'PICKUP',
       operatingWarehouseId: driverUserId,
@@ -204,7 +207,7 @@ describe('DriversService', () => {
     } as unknown as PrismaService;
 
     await expect(
-      new DriversService(prisma).setAvailability(actor, true, {}),
+      new DriversService(prisma, driverOwnership).setAvailability(actor, true, {}),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -231,7 +234,11 @@ describe('DriversService', () => {
       ),
     } as unknown as PrismaService;
 
-    const result = await new DriversService(prisma).setAvailability(actor, true, {});
+    const result = await new DriversService(prisma, driverOwnership).setAvailability(
+      actor,
+      true,
+      {},
+    );
 
     expect(result.status).toBe(DriverStatus.AVAILABLE);
     const updateCalls = transaction.driverProfile.updateMany.mock.calls as unknown as Array<
@@ -263,7 +270,7 @@ describe('DriversService', () => {
     } as unknown as PrismaService;
 
     await expect(
-      new DriversService(prisma).setAvailability(actor, true, {}),
+      new DriversService(prisma, driverOwnership).setAvailability(actor, true, {}),
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(transaction.auditLog.create).not.toHaveBeenCalled();
@@ -289,7 +296,7 @@ describe('DriversService', () => {
     } as unknown as PrismaService;
 
     await expect(
-      new DriversService(prisma).update(
+      new DriversService(prisma, driverOwnership).update(
         actor,
         current.id,
         { operatingWarehouseId: '22222222-2222-4222-8222-222222222222' },

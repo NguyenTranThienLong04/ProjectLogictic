@@ -12,6 +12,7 @@ import { PrismaService } from '../src/database/prisma.service.js';
 import { ShipmentStatus, TrackingVisibility, UserRole } from '../src/generated/prisma/client.js';
 import { PasswordHasherService } from '../src/modules/auth/password-hasher.service.js';
 import { NotificationJobsService } from '../src/modules/notifications/notification-jobs.service.js';
+import { NotificationsService } from '../src/modules/notifications/notifications.service.js';
 import { CacheService } from '../src/redis/cache.service.js';
 import { RedisService } from '../src/redis/redis.service.js';
 
@@ -229,15 +230,17 @@ describe('Phase 8 cache and Notification Center (e2e)', () => {
       socket.once('connect', resolve);
       socket.once('connect_error', reject);
     });
-    const notification = await prisma.notification.create({
-      data: {
-        userId: customerId,
-        eventKey: `phase8:${runId}:socket`,
-        type: 'SHIPMENT_CONFIRMED',
-        title: 'Realtime notification',
-        message: 'Delivered by BullMQ',
-      },
-    });
+    const [notification] = await prisma.$transaction((tx) =>
+      app.get(NotificationsService).createIdempotent(tx, [
+        {
+          userId: customerId,
+          eventKey: `phase8:${runId}:socket`,
+          type: 'SHIPMENT_CONFIRMED',
+          title: 'Realtime notification',
+          message: 'Delivered by BullMQ',
+        },
+      ]),
+    );
     const received = new Promise<{ id: string }>((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('notification.created timed out')), 10_000);
       socket.once('notification.created', (payload: { id: string }) => {

@@ -2,8 +2,8 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { Queue, Worker, type Job } from 'bullmq';
 import type { Redis } from 'ioredis';
-import type { Notification } from '../../generated/prisma/client.js';
-import { UserRole } from '../../generated/prisma/client.js';
+import type { Notification, NotificationDelivery } from '../../generated/prisma/client.js';
+import { NotificationDeliveryChannel, Prisma, UserRole } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { RedisService } from '../../redis/redis.service.js';
 import { redactSensitiveText } from '../../common/logging/structured-log.js';
@@ -54,6 +54,8 @@ export class NotificationJobsService implements OnModuleInit, OnModuleDestroy {
   private notificationWorker?: Worker<NotificationJobData>;
   private emailWorker?: Worker<EmailJobData>;
   private readonly connections: Redis[] = [];
+  private reconciliationTimer?: ReturnType<typeof setInterval>;
+  private reconciliation?: Promise<void>;
 
   constructor(
     private readonly redis: RedisService,
@@ -132,9 +134,14 @@ export class NotificationJobsService implements OnModuleInit, OnModuleDestroy {
       this.logger.error(redactSensitiveText(error.message)),
     );
     this.emailWorker.on('error', (error) => this.logger.error(redactSensitiveText(error.message)));
+    this.reconciliationTimer = setInterval(() => void this.reconcile(), 5_000);
+    this.reconciliationTimer.unref();
+    await this.reconcile();
   }
 
   async onModuleDestroy(): Promise<void> {
+    clearInterval(this.reconciliationTimer);
+    await this.reconciliation;
     await Promise.allSettled([
       this.notificationWorker?.close(),
       this.emailWorker?.close(),
@@ -145,17 +152,77 @@ export class NotificationJobsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async enqueueNotifications(notifications: Notification[]): Promise<void> {
-    if (!this.notificationQueue || notifications.length === 0) return;
+    if (notifications.length === 0) return;
+    await this.reconcile(notifications.map(({ id }) => id));
+  }
+
+  // The timer/startup scan is authoritative; post-commit publish only reduces latency.
+  async reconcile(notificationIds?: string[]): Promise<void> {
+    if (!this.notificationQueue || !this.emailQueue) return;
+    if (this.reconciliation) return this.reconciliation;
+    this.reconciliation = this.reconcileBatch(notificationIds).catch((error: unknown) => {
+      this.logger.error(`Notification reconciliation failed: ${this.errorMessage(error)}`);
+    });
     try {
-      await this.notificationQueue.addBulk(
-        notifications.map((notification) => ({
-          name: 'deliver-in-app',
-          data: { kind: 'notification' as const, notificationId: notification.id },
-          opts: this.jobOptions(`notification-${notification.id}`),
-        })),
-      );
-    } catch (error) {
-      this.logger.error(`Could not enqueue notifications: ${this.errorMessage(error)}`);
+      await this.reconciliation;
+    } finally {
+      this.reconciliation = undefined;
+    }
+  }
+
+  private async reconcileBatch(notificationIds?: string[]): Promise<void> {
+    // Atomic, bounded claim. Runtime supports one backend instance (Socket.IO rooms are local).
+    // No PostgreSQL lock is held over Redis.
+    const deliveries = await this.prisma.$queryRaw<NotificationDelivery[]>(Prisma.sql`
+      WITH due AS (
+        SELECT "notificationId", "channel" FROM "NotificationDelivery"
+        WHERE "completedAt" IS NULL AND "nextAttemptAt" <= CURRENT_TIMESTAMP
+        ${notificationIds ? Prisma.sql`AND "notificationId" IN (${Prisma.join(notificationIds.map((id) => Prisma.sql`${id}::uuid`))})` : Prisma.empty}
+        ORDER BY "nextAttemptAt", "notificationId", "channel"
+        LIMIT 50 FOR UPDATE SKIP LOCKED
+      )
+      UPDATE "NotificationDelivery" AS delivery
+      SET "enqueueAttempts" = delivery."enqueueAttempts" + 1,
+          "nextAttemptAt" = CURRENT_TIMESTAMP + make_interval(secs =>
+            LEAST(300, 10 * power(2, LEAST(delivery."enqueueAttempts", 5)))::int)
+      FROM due WHERE delivery."notificationId" = due."notificationId" AND delivery."channel" = due."channel"
+      RETURNING delivery.*
+    `);
+    for (const delivery of deliveries) {
+      const { notificationId, channel } = delivery;
+      const queue =
+        channel === NotificationDeliveryChannel.REALTIME
+          ? this.notificationQueue!
+          : this.emailQueue!;
+      const jobId = `${channel === NotificationDeliveryChannel.REALTIME ? 'notification' : 'email'}-${notificationId}`;
+      try {
+        const existing = await queue.getJob(jobId);
+        if (existing) {
+          const state = await existing.getState();
+          // Do not interfere with BullMQ's active/delayed retries. Exhausted/lost acknowledgements
+          // may be retried after the PostgreSQL backoff; workers recheck durable completion.
+          if (state === 'failed' || state === 'completed') {
+            await existing.retry(state, { resetAttemptsMade: true, resetAttemptsStarted: true });
+          }
+        } else {
+          await queue.add(
+            channel === NotificationDeliveryChannel.REALTIME ? 'deliver-in-app' : 'deliver-email',
+            { kind: 'notification', notificationId },
+            this.jobOptions(jobId),
+          );
+        }
+        await this.prisma.notificationDelivery.updateMany({
+          where: { notificationId, channel, completedAt: null },
+          // A queue acknowledgement must not erase an earlier/concurrent worker failure.
+          data: { enqueuedAt: new Date() },
+        });
+      } catch (error) {
+        await this.prisma.notificationDelivery.updateMany({
+          where: { notificationId, channel, completedAt: null },
+          data: { lastError: this.errorMessage(error).slice(0, 500) },
+        });
+        this.logger.error(`Could not enqueue ${jobId}: ${this.errorMessage(error)}`);
+      }
     }
   }
 
@@ -196,39 +263,46 @@ export class NotificationJobsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async processNotification(notificationId: string): Promise<void> {
-    const notification = await this.prisma.notification.findUnique({
-      where: { id: notificationId },
-      include: { user: { select: { role: true } } },
-    });
-    if (!notification) return;
-    await this.gateway.emitNotification(notification);
-    const shouldEmail =
-      notification.user.role === UserRole.CUSTOMER &&
-      EMAIL_NOTIFICATION_TYPES.has(notification.type);
-    if (!shouldEmail) return;
-    if (!this.emailSender.enabled) {
-      this.logger.log(`SMTP disabled, skipped email notification ${notification.id}`);
-      return;
+    if (!(await this.pending(notificationId, NotificationDeliveryChannel.REALTIME))) return;
+    try {
+      const notification = await this.prisma.notification.findUnique({
+        where: { id: notificationId },
+      });
+      if (!notification) return;
+      await this.gateway.emitNotification(notification);
+      await this.complete(notificationId, NotificationDeliveryChannel.REALTIME);
+    } catch (error) {
+      await this.prisma.notificationDelivery.updateMany({
+        where: { notificationId, channel: NotificationDeliveryChannel.REALTIME, completedAt: null },
+        data: { lastError: this.errorMessage(error).slice(0, 500) },
+      });
+      throw error;
     }
-    await this.enqueueEmail(notification.id);
   }
 
   async processEmail(notificationId: string): Promise<void> {
+    if (!(await this.pending(notificationId, NotificationDeliveryChannel.EMAIL))) return;
     if (!this.emailSender.enabled) {
       this.logger.log(`SMTP disabled, skipped email notification ${notificationId}`);
+      await this.complete(notificationId, NotificationDeliveryChannel.EMAIL, 'EMAIL_DISABLED');
       return;
     }
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId },
       include: { user: { select: { email: true, role: true } } },
     });
+    if (!notification) return;
+    if (notification.emailSentAt) {
+      await this.complete(notificationId, NotificationDeliveryChannel.EMAIL);
+      return;
+    }
     if (
-      !notification ||
-      notification.emailSentAt ||
       notification.user.role !== UserRole.CUSTOMER ||
       !EMAIL_NOTIFICATION_TYPES.has(notification.type)
-    )
+    ) {
+      await this.complete(notificationId, NotificationDeliveryChannel.EMAIL, 'EMAIL_INELIGIBLE');
       return;
+    }
 
     const messageId = this.messageId(`notification-${notification.id}`);
     const claimed = await this.prisma.notification.updateMany({
@@ -251,6 +325,7 @@ export class NotificationJobsService implements OnModuleInit, OnModuleDestroy {
         where: { id: notification.id, emailSentAt: null },
         data: { emailSentAt: new Date(), emailMessageId: messageId, emailLastError: null },
       });
+      await this.complete(notificationId, NotificationDeliveryChannel.EMAIL);
     } catch (error) {
       await this.prisma.notification.updateMany({
         where: { id: notification.id, emailSentAt: null },
@@ -273,13 +348,25 @@ export class NotificationJobsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async enqueueEmail(notificationId: string): Promise<void> {
-    if (!this.emailQueue) return;
-    await this.emailQueue.add(
-      'deliver-email',
-      { kind: 'notification', notificationId },
-      this.jobOptions(`email-${notificationId}`),
-    );
+  private async pending(
+    notificationId: string,
+    channel: NotificationDeliveryChannel,
+  ): Promise<boolean> {
+    const delivery = await this.prisma.notificationDelivery.findUnique({
+      where: { notificationId_channel: { notificationId, channel } },
+    });
+    return !!delivery && !delivery.completedAt;
+  }
+
+  private async complete(
+    notificationId: string,
+    channel: NotificationDeliveryChannel,
+    skippedReason: string | null = null,
+  ): Promise<void> {
+    await this.prisma.notificationDelivery.updateMany({
+      where: { notificationId, channel, completedAt: null },
+      data: { completedAt: new Date(), skippedReason, lastError: null },
+    });
   }
 
   private connection(client: Redis, purpose: 'producer' | 'worker'): Redis {

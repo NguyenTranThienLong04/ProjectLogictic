@@ -41,6 +41,13 @@ function notification(): Notification & { user: { email: string; role: UserRole 
   };
 }
 
+function deliveries() {
+  return {
+    findUnique: jest.fn(() => Promise.resolve({ completedAt: null })),
+    updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
+  };
+}
+
 describe('NotificationJobsService', () => {
   afterEach(() => jest.restoreAllMocks());
 
@@ -131,6 +138,7 @@ describe('NotificationJobsService', () => {
     );
     const prisma = {
       notification: { findUnique, updateMany },
+      notificationDelivery: deliveries(),
     } as unknown as PrismaService;
     const send = jest.fn(() => Promise.resolve());
     const jobs = new NotificationJobsService(
@@ -155,22 +163,31 @@ describe('NotificationJobsService', () => {
   });
 
   it('isolates a BullMQ enqueue failure from the committed notification state', async () => {
+    const notificationDelivery = deliveries();
     const jobs = new NotificationJobsService(
       {} as RedisService,
-      {} as PrismaService,
+      {
+        $queryRaw: jest.fn(() => Promise.resolve([{ notificationId, channel: 'REALTIME' }])),
+        notificationDelivery,
+      } as unknown as PrismaService,
       {} as NotificationsGateway,
       {} as EmailSender,
       configuration(),
     );
-    const addBulk = jest.fn(() => Promise.reject(new Error('Redis unavailable')));
+    const getJob = jest.fn(() => Promise.reject(new Error('Redis unavailable')));
     (
       jobs as unknown as {
-        notificationQueue: { addBulk: typeof addBulk };
+        notificationQueue: { getJob: typeof getJob };
       }
-    ).notificationQueue = { addBulk };
+    ).notificationQueue = { getJob };
+    (jobs as unknown as { emailQueue: object }).emailQueue = {};
 
     await expect(jobs.enqueueNotifications([notification()])).resolves.toBeUndefined();
-    expect(addBulk).toHaveBeenCalledTimes(1);
+    expect(getJob).toHaveBeenCalledTimes(1);
+    expect(notificationDelivery.updateMany).toHaveBeenCalledWith({
+      where: { notificationId, channel: 'REALTIME', completedAt: null },
+      data: { lastError: 'Redis unavailable' },
+    });
   });
 
   it('gracefully skips SMTP enqueue when delivery is disabled', async () => {
@@ -183,7 +200,10 @@ describe('NotificationJobsService', () => {
     const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     const jobs = new NotificationJobsService(
       {} as RedisService,
-      { notification: { findUnique } } as unknown as PrismaService,
+      {
+        notification: { findUnique },
+        notificationDelivery: deliveries(),
+      } as unknown as PrismaService,
       gateway,
       { enabled: false, send },
       configuration(),
@@ -195,6 +215,7 @@ describe('NotificationJobsService', () => {
     ).emailQueue = { add };
 
     await expect(jobs.processNotification(notificationId)).resolves.toBeUndefined();
+    await expect(jobs.processEmail(notificationId)).resolves.toBeUndefined();
 
     expect(emitNotification).toHaveBeenCalledWith(current);
     expect(add).not.toHaveBeenCalled();
@@ -207,7 +228,10 @@ describe('NotificationJobsService', () => {
     const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     const jobs = new NotificationJobsService(
       {} as RedisService,
-      { notification: { findUnique } } as unknown as PrismaService,
+      {
+        notification: { findUnique },
+        notificationDelivery: deliveries(),
+      } as unknown as PrismaService,
       {} as NotificationsGateway,
       { enabled: false, send },
       configuration(),

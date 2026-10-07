@@ -7,12 +7,17 @@ import { FormField } from '../../components/ui/form-field';
 import { LoadingState } from '../../components/ui/loading-state';
 import { Modal } from '../../components/ui/modal';
 import { PageHeader } from '../../components/ui/page-header';
+import { Pagination } from '../../components/ui/pagination';
 import { Select } from '../../components/ui/select';
 import {
   CodPayoutStatusBadge,
   CodRemittanceStatusBadge,
   CodStatusBadge,
 } from '../../components/ui/status-badge';
+import {
+  codStatusBadgeConfig,
+  codPayoutStatusBadgeConfig,
+} from '../../components/ui/status-badge-config';
 import { getApiErrorMessage } from '../../services/api-error';
 import { dateTimeFormatter, vndFormatter } from '../../utils/format';
 import { AccountLayout } from '../auth/components/account-layout';
@@ -25,7 +30,7 @@ import {
   sendCodPayout,
   settleCod,
 } from './cod-api';
-import type { CodPayout, CodTransaction } from './cod-api';
+import type { CodListQuery, CodPayout, CodStatus, CodTransaction } from './cod-api';
 
 type Action = 'submit' | 'confirm' | 'reject' | 'settle' | 'create' | 'send';
 const labels: Record<Action, string> = {
@@ -59,9 +64,18 @@ export function CodDashboardPage({ driver = false }: { driver?: boolean }) {
   const [reference, setReference] = useState('');
   const [note, setNote] = useState('');
   const [method, setMethod] = useState<CodPayout['method']>('BANK_TRANSFER');
+  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState<CodStatus | ''>('');
+  const [payoutStatus, setPayoutStatus] = useState<CodListQuery['payoutStatus'] | ''>('');
+  const params: CodListQuery = {
+    page,
+    limit: 20,
+    status: status || undefined,
+    ...(!driver && payoutStatus ? { payoutStatus } : {}),
+  };
   const query = useQuery({
-    queryKey: ['cod-dashboard', driver ? 'mine' : 'all'],
-    queryFn: driver ? getMyCod : getCodDashboard,
+    queryKey: ['cod-dashboard', driver ? 'mine' : 'all', params],
+    queryFn: () => (driver ? getMyCod(params) : getCodDashboard(params)),
     refetchInterval: 30_000,
   });
   const mutation = useMutation({
@@ -132,12 +146,6 @@ export function CodDashboardPage({ driver = false }: { driver?: boolean }) {
   const close = () => {
     if (!mutation.isPending) setSelection(null);
   };
-  if (query.isPending)
-    return (
-      <AccountLayout>
-        <LoadingState label="Đang tải COD" />
-      </AccountLayout>
-    );
 
   const actionButton = (row: CodTransaction, action: Action, text = labels[action]) => (
     <Button
@@ -310,21 +318,91 @@ export function CodDashboardPage({ driver = false }: { driver?: boolean }) {
           </section>
         )}
         <section className="mt-6 min-w-0">
-          <DataTable
-            wide
-            caption="Giao dịch COD và xác nhận tiền"
-            columns={columns}
-            rows={query.data?.items ?? []}
-            getRowKey={(row) => row.id}
-            error={query.isError ? getApiErrorMessage(query.error) : undefined}
-            onRetry={() => void query.refetch()}
-            emptyTitle="Chưa có giao dịch COD"
-            emptyDescription="Giao dịch xuất hiện sau khi tài xế giao thành công và thu COD."
-          />
+          <div className="mb-4 grid gap-3 sm:grid-cols-2" aria-label="Bộ lọc COD">
+            <div>
+              <label htmlFor="cod-status-filter" className="mb-1.5 block text-sm font-semibold">
+                Trạng thái COD
+              </label>
+              <Select
+                id="cod-status-filter"
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value as CodStatus | '');
+                  setPage(1);
+                }}
+              >
+                <option value="">Tất cả trạng thái COD</option>
+                {Object.entries(codStatusBadgeConfig).map(([value, appearance]) => (
+                  <option key={value} value={value}>
+                    {appearance.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {!driver && (
+              <div>
+                <label htmlFor="cod-payout-filter" className="mb-1.5 block text-sm font-semibold">
+                  Chi trả khách hàng
+                </label>
+                <Select
+                  id="cod-payout-filter"
+                  value={payoutStatus}
+                  onChange={(event) => {
+                    setPayoutStatus(event.target.value as CodListQuery['payoutStatus']);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Tất cả khoản chi trả</option>
+                  <option value="NONE">Chưa tạo khoản chi trả</option>
+                  {Object.entries(codPayoutStatusBadgeConfig).map(([value, appearance]) => (
+                    <option key={value} value={value}>
+                      {appearance.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+          </div>
+          {query.isPending ? (
+            <LoadingState label="Đang tải COD" />
+          ) : (
+            <DataTable
+              wide
+              caption="Giao dịch COD và xác nhận tiền"
+              columns={columns}
+              rows={query.data?.items ?? []}
+              getRowKey={(row) => row.id}
+              error={query.isError ? getApiErrorMessage(query.error) : undefined}
+              onRetry={() => void query.refetch()}
+              emptyTitle="Không có giao dịch COD phù hợp"
+              emptyDescription="Thử thay đổi bộ lọc để xem các giao dịch khác."
+            />
+          )}
+          {query.data && !query.isError && (
+            <div className="mt-4 space-y-3 [&_button]:min-h-12">
+              <p role="status" className="text-sm text-muted-foreground">
+                {query.data.total} giao dịch phù hợp · {query.data.items.length} giao dịch trên
+                trang này.
+              </p>
+              {page > Math.max(1, query.data.totalPages) ? (
+                <Button variant="secondary" onClick={() => setPage(1)}>
+                  Về trang đầu
+                </Button>
+              ) : (
+                <Pagination
+                  page={page}
+                  totalPages={query.data.totalPages}
+                  onPageChange={setPage}
+                  disabled={query.isFetching}
+                  label="Phân trang COD"
+                />
+              )}
+            </div>
+          )}
         </section>
         <p className="mt-3 text-sm text-muted-foreground">
-          Hiển thị tối đa 100 giao dịch mới nhất. Tổng hợp tính trên toàn bộ giao dịch thuộc quyền
-          truy cập.
+          Tổng hợp tính trên toàn bộ giao dịch thuộc quyền truy cập, không thay đổi theo trang hoặc
+          bộ lọc.
         </p>
         <Modal
           open={selection !== null}

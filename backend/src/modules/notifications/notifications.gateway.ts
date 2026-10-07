@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
+import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
   MessageBody,
@@ -30,6 +30,8 @@ interface SocketData {
   driverId?: string;
   accessTokenExpiresAt?: number;
 }
+
+class SocketAuthorizationError extends Error {}
 
 @WebSocketGateway({ namespace: '/operations' })
 export class NotificationsGateway
@@ -113,9 +115,9 @@ export class NotificationsGateway
       user.tokenVersion !== payload.ver ||
       user.mustChangePassword
     ) {
-      throw new Error('Unauthorized socket');
+      throw new SocketAuthorizationError('Unauthorized socket');
     }
-    if (!payload.exp) throw new Error('Unauthorized socket');
+    if (!payload.exp) throw new SocketAuthorizationError('Unauthorized socket');
 
     const data = client.data as SocketData;
     data.userId = user.id;
@@ -183,15 +185,20 @@ export class NotificationsGateway
   }
 
   async emitNotification(notification: Notification): Promise<void> {
-    if (!this.server) return;
-    await this.emitToRoom(`user:${notification.userId}`, 'notification.created', {
-      id: notification.id,
-      type: notification.type,
-      title: notification.title,
-      message: notification.message,
-      data: notification.data,
-      createdAt: notification.createdAt,
-    });
+    if (!this.server) throw new Error('Notification realtime gateway is unavailable');
+    await this.emitToRoom(
+      `user:${notification.userId}`,
+      'notification.created',
+      {
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        data: notification.data,
+        createdAt: notification.createdAt,
+      },
+      true,
+    );
   }
 
   async emitAssignmentCreated(input: {
@@ -273,26 +280,37 @@ export class NotificationsGateway
     if (typeof authToken === 'string' && authToken) return authToken;
     const [scheme, headerToken] = client.handshake.headers.authorization?.split(' ') ?? [];
     if (scheme === 'Bearer' && headerToken) return headerToken;
-    throw new Error('Missing socket token');
+    throw new SocketAuthorizationError('Missing socket token');
   }
 
-  private async revalidate(client: Socket): Promise<boolean> {
+  private async revalidate(client: Socket, requireDelivery = false): Promise<boolean> {
     try {
       await this.authenticate(client);
       return true;
-    } catch {
+    } catch (error) {
       client.disconnect(true);
+      if (
+        requireDelivery &&
+        !(error instanceof SocketAuthorizationError) &&
+        !(error instanceof JsonWebTokenError)
+      )
+        throw error;
       return false;
     }
   }
 
-  private async emitToRoom(room: string, event: string, payload: unknown): Promise<void> {
+  private async emitToRoom(
+    room: string,
+    event: string,
+    payload: unknown,
+    requireDelivery = false,
+  ): Promise<void> {
     try {
       const clients = await this.server.in(room).fetchSockets();
       await Promise.all(
         clients.map(async (remote) => {
           const client = remote as unknown as Socket;
-          if (!(await this.revalidate(client))) return;
+          if (!(await this.revalidate(client, requireDelivery))) return;
           const data = client.data as SocketData;
           let allowed: boolean;
           if (room.startsWith('linehaul-trip:')) {
@@ -332,8 +350,9 @@ export class NotificationsGateway
           else await client.leave(room);
         }),
       );
-    } catch {
-      // Realtime is disposable: fail closed without leaking errors or failing committed commands.
+    } catch (error) {
+      // Durable notifications must reach BullMQ's retry path. Other invalidations remain best-effort.
+      if (requireDelivery) throw error;
       this.logger.warn('Socket delivery skipped because authorization could not be verified');
     }
   }

@@ -3,6 +3,9 @@ import { UserRole, UserStatus } from '../../generated/prisma/client.js';
 import type { PrismaService } from '../../database/prisma.service.js';
 import type { PasswordHasherService } from '../auth/password-hasher.service.js';
 import { UsersService } from './users.service.js';
+import { DriverTaskOwnershipService } from '../assignments/driver-task-ownership.service.js';
+
+const driverOwnership = new DriverTaskOwnershipService();
 
 describe('UsersService audit coverage', () => {
   it('creates a staff account and its actor-attributed audit record atomically', async () => {
@@ -40,7 +43,7 @@ describe('UsersService audit coverage', () => {
       mustChangePassword: false,
     };
 
-    await new UsersService(prisma, hasher).createStaff(
+    await new UsersService(prisma, hasher, driverOwnership).createStaff(
       actor,
       {
         email: created.email,
@@ -92,10 +95,14 @@ describe('UsersService audit coverage', () => {
     };
     const updated = { ...current, status: UserStatus.SUSPENDED, tokenVersion: 1 };
     const transaction = {
+      $queryRaw: jest.fn(() => Promise.resolve([{ id: driverProfile.id }])),
       user: {
         findUnique: jest.fn(() => Promise.resolve(current)),
         updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
-        findUniqueOrThrow: jest.fn(() => Promise.resolve(updated)),
+        findUniqueOrThrow: jest
+          .fn<() => Promise<typeof current | typeof updated>>()
+          .mockResolvedValueOnce(current)
+          .mockResolvedValue(updated),
       },
       driverAssignment: { count: jest.fn(() => Promise.resolve(0)) },
       lineHaulTrip: { count: jest.fn(() => Promise.resolve(0)) },
@@ -108,12 +115,14 @@ describe('UsersService audit coverage', () => {
       ),
     } as unknown as PrismaService;
 
-    const result = await new UsersService(prisma, {} as PasswordHasherService).setStatus(
-      actor,
-      current.id,
-      UserStatus.SUSPENDED,
-      { ipAddress: '127.0.0.1', userAgent: 'test-agent' },
-    );
+    const result = await new UsersService(
+      prisma,
+      {} as PasswordHasherService,
+      driverOwnership,
+    ).setStatus(actor, current.id, UserStatus.SUSPENDED, {
+      ipAddress: '127.0.0.1',
+      userAgent: 'test-agent',
+    });
 
     expect(transaction.driverAssignment.count).toHaveBeenCalledTimes(1);
     expect(transaction.driverProfile.updateMany).toHaveBeenCalledWith({

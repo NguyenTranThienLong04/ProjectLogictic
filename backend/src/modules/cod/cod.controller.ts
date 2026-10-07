@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -16,6 +17,7 @@ import type { AuthenticatedUser, ClientContext } from '../auth/auth.types.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CodService } from './cod.service.js';
+import { ListCodDto } from './dto/list-cod.dto.js';
 import {
   CodReasonDto,
   CodVersionDto,
@@ -39,13 +41,15 @@ export class CodController {
   ) {
     return this.cod.remit(actor, shipmentId, dto, this.context(req));
   }
-  @Get('dashboard') @Roles(UserRole.ADMIN) dashboard() {
-    return this.cod.dashboard();
+  @Get('dashboard')
+  @Roles(UserRole.ADMIN)
+  dashboard(@Query() query: ListCodDto) {
+    return this.cod.dashboard(query);
   }
   @Get('mine')
   @Roles(UserRole.DRIVER)
-  mine(@CurrentUser() actor: AuthenticatedUser) {
-    return this.cod.mine(actor);
+  mine(@CurrentUser() actor: AuthenticatedUser, @Query() query: ListCodDto) {
+    return this.cod.mine(actor, query);
   }
   @Post(':id/settle')
   @Roles(UserRole.ADMIN)

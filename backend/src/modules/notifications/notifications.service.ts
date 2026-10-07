@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, type Notification } from '../../generated/prisma/client.js';
+import {
+  NotificationDeliveryChannel,
+  Prisma,
+  type Notification,
+} from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { CacheService } from '../../redis/cache.service.js';
 import { NotificationsGateway } from './notifications.gateway.js';
@@ -32,12 +36,24 @@ export class NotificationsService {
       data: inputs,
       skipDuplicates: true,
     });
-    return transaction.notification.findMany({
+    const notifications = await transaction.notification.findMany({
       where: {
         OR: inputs.map(({ userId, eventKey }) => ({ userId, eventKey })),
       },
       orderBy: { createdAt: 'asc' },
     });
+    if (notifications.length > 0) {
+      await transaction.notificationDelivery.createMany({
+        data: notifications.flatMap(({ id }) =>
+          Object.values(NotificationDeliveryChannel).map((channel) => ({
+            notificationId: id,
+            channel,
+          })),
+        ),
+        skipDuplicates: true,
+      });
+    }
+    return notifications;
   }
 
   async list(userId: string, page: number, limit: number, unreadOnly: boolean) {

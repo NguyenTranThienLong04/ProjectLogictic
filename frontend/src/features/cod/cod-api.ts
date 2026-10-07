@@ -45,6 +45,10 @@ export interface CodTransaction {
   payout?: CodPayout | null;
 }
 export interface CodDashboard {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
   items: CodTransaction[];
   summary: Array<{
     status: CodStatus;
@@ -52,11 +56,17 @@ export interface CodDashboard {
     _count: { _all: number };
   }>;
 }
-export async function getCodDashboard() {
-  return (await api.get<ApiEnvelope<CodDashboard>>('/cod/dashboard')).data.data;
+export interface CodListQuery {
+  page?: number;
+  limit?: number;
+  status?: CodStatus;
+  payoutStatus?: CodPayout['status'] | 'NONE';
 }
-export async function getMyCod() {
-  return (await api.get<ApiEnvelope<CodDashboard>>('/cod/mine')).data.data;
+export async function getCodDashboard(params: CodListQuery = {}) {
+  return (await api.get<ApiEnvelope<CodDashboard>>('/cod/dashboard', { params })).data.data;
+}
+export async function getMyCod(params: Omit<CodListQuery, 'payoutStatus'> = {}) {
+  return (await api.get<ApiEnvelope<CodDashboard>>('/cod/mine', { params })).data.data;
 }
 export async function remitCod(input: {
   shipmentId: string;

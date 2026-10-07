@@ -523,63 +523,160 @@ describe('DeliveryService', () => {
     expect(tx.shipment.updateMany).not.toHaveBeenCalled();
   });
 
-  it('rejects return start when a newer active assignment supersedes the failed attempt owner', async () => {
-    const failedAt = new Date('2026-08-21T06:00:00.000Z');
-    const shipment = {
-      id: shipmentId,
-      status: ShipmentStatus.RETURN_REQUESTED,
-      version: 3,
+  it.each([ShipmentStatus.RETURN_REQUESTED, ShipmentStatus.RETURN_IN_TRANSIT])(
+    'rejects a non-owner starting return in %s without returning shipment data',
+    async (status) => {
+      const tx = {
+        shipment: {
+          findUnique: jest.fn(() =>
+            Promise.resolve({
+              id: shipmentId,
+              status,
+              deliveryAttempts: [
+                {
+                  status: DeliveryAttemptStatus.FAILED,
+                  driver: {
+                    userId: anotherDriverId,
+                    status: DriverStatus.AVAILABLE,
+                    user: { status: UserStatus.ACTIVE },
+                  },
+                },
+              ],
+            }),
+          ),
+          updateMany: jest.fn(),
+          findUniqueOrThrow: jest.fn(),
+        },
+      };
+      const prisma = {
+        $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+      } as unknown as PrismaService;
+
+      await expect(service(prisma).startReturn(actor, shipmentId, {})).rejects.toMatchObject({
+        response: { code: 'RETURN_ATTEMPT_NOT_FOUND' },
+        status: 404,
+      });
+      expect(tx.shipment.updateMany).not.toHaveBeenCalled();
+      expect(tx.shipment.findUniqueOrThrow).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns the same safe shipment projection on owner start and retry without duplicate writes', async () => {
+    const failedAssignment = assignment();
+    const current = {
+      ...failedAssignment.shipment,
+      status: ShipmentStatus.RETURN_REQUESTED as ShipmentStatus,
       deliveryAttempts: [
         {
           id: '77777777-7777-4777-8777-777777777777',
+          driverAssignmentId: assignmentId,
           status: DeliveryAttemptStatus.FAILED,
-          completedAt: failedAt,
+          completedAt: new Date('2026-08-21T06:00:00.000Z'),
           driver: {
-            userId: actor.id,
-            status: DriverStatus.AVAILABLE,
-            user: { status: UserStatus.ACTIVE },
+            ...failedAssignment.driver,
+            user: {
+              status: UserStatus.ACTIVE,
+              passwordHash: 'private-password-hash',
+              tokenVersion: 3,
+              authSessions: [{ refreshTokenHash: 'private-session-hash' }],
+            },
           },
         },
       ],
     };
+    const committed = {
+      id: shipmentId,
+      status: ShipmentStatus.RETURN_IN_TRANSIT,
+      version: current.version + 1,
+      currentWarehouseId: null,
+    };
     const tx = {
       shipment: {
-        findUnique: jest.fn(() => Promise.resolve(shipment)),
+        findUnique: jest.fn(() => Promise.resolve(current)),
         updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
+        findUniqueOrThrow: jest.fn(() => Promise.resolve(committed)),
       },
-      driverAssignment: {
-        findFirst: jest.fn(() =>
-          Promise.resolve({
-            id: '99999999-9999-4999-8999-999999999999',
-            driverId: anotherDriverId,
-          }),
-        ),
-      },
+      driverAssignment: { findFirst: jest.fn(() => Promise.resolve(null)) },
+      trackingEvent: { create: jest.fn(() => Promise.resolve({})) },
+      auditLog: { create: jest.fn(() => Promise.resolve({})) },
     };
     const prisma = {
       $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
     } as unknown as PrismaService;
+    const delivery = service(prisma);
 
-    let thrown: unknown;
-    try {
-      await service(prisma).startReturn(actor, shipmentId, {});
-    } catch (error) {
-      thrown = error;
-    }
-    expect(thrown).toBeInstanceOf(ConflictException);
-    expect((thrown as ConflictException).getResponse()).toMatchObject({
-      code: 'RETURN_OWNERSHIP_SUPERSEDED',
-    });
-    expect(tx.driverAssignment.findFirst).toHaveBeenCalledWith({
-      where: {
-        shipmentId,
-        type: { in: [DriverAssignmentType.PICKUP, DriverAssignmentType.DELIVERY] },
-        status: { in: [DriverAssignmentStatus.PENDING, DriverAssignmentStatus.ACCEPTED] },
-        assignedAt: { gt: failedAt },
-      },
-    });
-    expect(tx.shipment.updateMany).not.toHaveBeenCalled();
+    const started = await delivery.startReturn(actor, shipmentId, {});
+    current.status = ShipmentStatus.RETURN_IN_TRANSIT;
+    const retried = await delivery.startReturn(actor, shipmentId, {});
+
+    expect(started).toEqual(committed);
+    expect(retried).toEqual(started);
+    expect(JSON.stringify(retried)).not.toMatch(/passwordHash|tokenVersion|refreshTokenHash/);
+    expect(tx.shipment.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.trackingEvent.create).toHaveBeenCalledTimes(1);
+    expect(tx.auditLog.create).toHaveBeenCalledTimes(1);
   });
+
+  it.each([ShipmentStatus.RETURN_REQUESTED, ShipmentStatus.RETURN_IN_TRANSIT])(
+    'rejects return start in %s when a newer active assignment supersedes the failed attempt owner',
+    async (status) => {
+      const failedAt = new Date('2026-08-21T06:00:00.000Z');
+      const shipment = {
+        id: shipmentId,
+        status,
+        version: 3,
+        deliveryAttempts: [
+          {
+            id: '77777777-7777-4777-8777-777777777777',
+            status: DeliveryAttemptStatus.FAILED,
+            completedAt: failedAt,
+            driver: {
+              userId: actor.id,
+              status: DriverStatus.AVAILABLE,
+              user: { status: UserStatus.ACTIVE },
+            },
+          },
+        ],
+      };
+      const tx = {
+        shipment: {
+          findUnique: jest.fn(() => Promise.resolve(shipment)),
+          updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
+        },
+        driverAssignment: {
+          findFirst: jest.fn(() =>
+            Promise.resolve({
+              id: '99999999-9999-4999-8999-999999999999',
+              driverId: anotherDriverId,
+            }),
+          ),
+        },
+      };
+      const prisma = {
+        $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+      } as unknown as PrismaService;
+
+      let thrown: unknown;
+      try {
+        await service(prisma).startReturn(actor, shipmentId, {});
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(ConflictException);
+      expect((thrown as ConflictException).getResponse()).toMatchObject({
+        code: 'RETURN_OWNERSHIP_SUPERSEDED',
+      });
+      expect(tx.driverAssignment.findFirst).toHaveBeenCalledWith({
+        where: {
+          shipmentId,
+          type: { in: [DriverAssignmentType.PICKUP, DriverAssignmentType.DELIVERY] },
+          status: { in: [DriverAssignmentStatus.PENDING, DriverAssignmentStatus.ACCEPTED] },
+          assignedAt: { gt: failedAt },
+        },
+      });
+      expect(tx.shipment.updateMany).not.toHaveBeenCalled();
+    },
+  );
 
   it('paginates driver delivery history in server-side queries', async () => {
     const findMany = jest.fn(() => Promise.resolve([]));

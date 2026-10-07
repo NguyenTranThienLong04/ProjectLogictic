@@ -634,63 +634,64 @@ export class WarehousesService {
   ) {
     await this.assertStaffWarehouseScope(actor, warehouseId);
 
-    const shipment = await this.prisma.shipment.findUnique({
-      where: { id: shipmentId },
-      include: warehouseShipmentInclude,
-    });
-    if (!shipment) {
-      throw new NotFoundException({
-        code: 'SHIPMENT_NOT_FOUND',
-        message: 'Shipment not found',
+    const result = await this.prisma.$transaction(async (transaction) => {
+      await this.lockShipment(transaction, shipmentId);
+      const shipment = await transaction.shipment.findUnique({
+        where: { id: shipmentId },
+        include: warehouseShipmentInclude,
       });
-    }
+      if (!shipment) {
+        throw new NotFoundException({
+          code: 'SHIPMENT_NOT_FOUND',
+          message: 'Shipment not found',
+        });
+      }
 
-    if (shipment.currentWarehouseId !== warehouseId) {
-      throw new ConflictException({
-        code: 'SHIPMENT_NOT_IN_WAREHOUSE',
-        message: 'Shipment is not currently located in this warehouse',
+      if (shipment.currentWarehouseId !== warehouseId) {
+        throw new ConflictException({
+          code: 'SHIPMENT_NOT_IN_WAREHOUSE',
+          message: 'Shipment is not currently located in this warehouse',
+        });
+      }
+
+      if (
+        shipment.destinationWarehouseId === dto.destinationWarehouseId &&
+        (shipment.status === ShipmentStatus.AT_ORIGIN_WAREHOUSE ||
+          shipment.status === ShipmentStatus.AWAITING_DELIVERY_ASSIGNMENT)
+      ) {
+        return { shipment, changed: false };
+      }
+
+      this.transitionPolicy.assertDestinationRoutable(shipment.status);
+
+      const activeTransfer = await transaction.warehouseTransfer.findFirst({
+        where: {
+          shipmentId,
+          status: { in: [WarehouseTransferStatus.PENDING, WarehouseTransferStatus.IN_TRANSIT] },
+        },
       });
-    }
+      if (activeTransfer) {
+        throw new ConflictException({
+          code: 'ACTIVE_TRANSFER_EXISTS',
+          message: 'Destination cannot change while an active warehouse transfer exists',
+        });
+      }
 
-    if (
-      shipment.destinationWarehouseId === dto.destinationWarehouseId &&
-      (shipment.status === ShipmentStatus.AT_ORIGIN_WAREHOUSE ||
-        shipment.status === ShipmentStatus.AWAITING_DELIVERY_ASSIGNMENT)
-    ) {
-      return this.serializeShipment(shipment);
-    }
-
-    this.transitionPolicy.assertDestinationRoutable(shipment.status);
-
-    const activeTransfer = await this.prisma.warehouseTransfer.findFirst({
-      where: {
-        shipmentId,
-        status: { in: [WarehouseTransferStatus.PENDING, WarehouseTransferStatus.IN_TRANSIT] },
-      },
-    });
-    if (activeTransfer) {
-      throw new ConflictException({
-        code: 'ACTIVE_TRANSFER_EXISTS',
-        message: 'Destination cannot change while an active warehouse transfer exists',
+      const targetWarehouse = await transaction.warehouse.findUnique({
+        where: { id: dto.destinationWarehouseId },
       });
-    }
+      if (!targetWarehouse || !targetWarehouse.isActive) {
+        throw new NotFoundException({
+          code: 'DESTINATION_WAREHOUSE_NOT_FOUND',
+          message: 'Destination warehouse not found or inactive',
+        });
+      }
 
-    const targetWarehouse = await this.prisma.warehouse.findUnique({
-      where: { id: dto.destinationWarehouseId },
-    });
-    if (!targetWarehouse || !targetWarehouse.isActive) {
-      throw new NotFoundException({
-        code: 'DESTINATION_WAREHOUSE_NOT_FOUND',
-        message: 'Destination warehouse not found or inactive',
-      });
-    }
+      const isIntraWarehouse = dto.destinationWarehouseId === warehouseId;
+      const nextStatus = isIntraWarehouse
+        ? ShipmentStatus.AWAITING_DELIVERY_ASSIGNMENT
+        : shipment.status;
 
-    const isIntraWarehouse = dto.destinationWarehouseId === warehouseId;
-    const nextStatus = isIntraWarehouse
-      ? ShipmentStatus.AWAITING_DELIVERY_ASSIGNMENT
-      : shipment.status;
-
-    const updatedShipment = await this.prisma.$transaction(async (transaction) => {
       await this.updateShipmentConditionally(transaction, shipment, {
         destinationWarehouseId: dto.destinationWarehouseId,
         status: nextStatus,
@@ -729,15 +730,18 @@ export class WarehousesService {
           userAgent: context.userAgent ?? null,
         },
       });
-      return transaction.shipment.findUniqueOrThrow({
+      const updatedShipment = await transaction.shipment.findUniqueOrThrow({
         where: { id: shipment.id },
         include: warehouseShipmentInclude,
       });
+      return { shipment: updatedShipment, changed: true };
     });
 
-    await this.notifications.publishShipmentUpdated(shipment.id, nextStatus);
+    if (result.changed) {
+      await this.notifications.publishShipmentUpdated(result.shipment.id, result.shipment.status);
+    }
 
-    return this.serializeShipment(updatedShipment);
+    return this.serializeShipment(result.shipment);
   }
 
   async markReadyForDelivery(
@@ -850,100 +854,101 @@ export class WarehousesService {
   ): Promise<WarehouseTransferResponse> {
     await this.assertStaffWarehouseScope(actor, warehouseId);
 
-    // Idempotency check C09
-    const existing = await this.prisma.warehouseTransfer.findUnique({
-      where: {
-        createdById_clientRequestId: {
-          createdById: actor.id,
-          clientRequestId: dto.clientRequestId,
-        },
-      },
-      include: warehouseTransferResponseInclude,
-    });
-    if (existing) {
-      this.assertTransferIdempotency(existing, warehouseId, dto);
-      return toWarehouseTransferResponse(existing, this.transferFlowPolicy);
-    }
-
-    const activeTransfer = await this.prisma.warehouseTransfer.findFirst({
-      where: {
-        shipmentId: dto.shipmentId,
-        status: { in: [WarehouseTransferStatus.PENDING, WarehouseTransferStatus.IN_TRANSIT] },
-      },
-      include: warehouseTransferResponseInclude,
-    });
-    if (activeTransfer) {
-      this.assertActiveTransferMatches(activeTransfer, warehouseId, dto);
-      return toWarehouseTransferResponse(activeTransfer, this.transferFlowPolicy);
-    }
-
-    if (dto.toWarehouseId === warehouseId) {
-      throw new BadRequestException({
-        code: 'TRANSFER_SAME_WAREHOUSE',
-        message: 'Destination warehouse cannot be the same as the origin warehouse',
-      });
-    }
-
-    const [fromWarehouse, toWarehouse] = await Promise.all([
-      this.prisma.warehouse.findUnique({ where: { id: warehouseId } }),
-      this.prisma.warehouse.findUnique({ where: { id: dto.toWarehouseId } }),
-    ]);
-
-    if (!fromWarehouse || !fromWarehouse.isActive) {
-      throw new NotFoundException({
-        code: 'ORIGIN_WAREHOUSE_NOT_FOUND',
-        message: 'Origin warehouse not found or inactive',
-      });
-    }
-    if (!toWarehouse || !toWarehouse.isActive) {
-      throw new NotFoundException({
-        code: 'DESTINATION_WAREHOUSE_NOT_FOUND',
-        message: 'Destination warehouse not found or inactive',
-      });
-    }
-
-    const shipment = await this.prisma.shipment.findUnique({
-      where: { id: dto.shipmentId },
-    });
-    if (!shipment) {
-      throw new NotFoundException({
-        code: 'SHIPMENT_NOT_FOUND',
-        message: 'Shipment not found',
-      });
-    }
-
-    if (shipment.currentWarehouseId !== warehouseId) {
-      throw new ConflictException({
-        code: 'SHIPMENT_NOT_AT_ORIGIN_WAREHOUSE',
-        message: 'Shipment is not currently located at this warehouse',
-      });
-    }
-
-    this.transitionPolicy.assertTransferCreatable(shipment.status);
-
-    if (!shipment.destinationWarehouseId) {
-      throw new ConflictException({
-        code: 'DESTINATION_WAREHOUSE_REQUIRED',
-        message: 'Sort and confirm the destination warehouse before creating a transfer',
-      });
-    }
-    if (shipment.destinationWarehouseId !== dto.toWarehouseId) {
-      throw new ConflictException({
-        code: 'TRANSFER_DESTINATION_MISMATCH',
-        message: 'Transfer destination must match the shipment sorting destination',
-      });
-    }
-
-    const transferCode = `TRF-${Date.now().toString(36).toUpperCase()}-${Math.random()
-      .toString(36)
-      .substring(2, 6)
-      .toUpperCase()}`;
-
     let transfer: Prisma.WarehouseTransferGetPayload<{
       include: typeof warehouseTransferResponseInclude;
     }>;
     try {
       transfer = await this.prisma.$transaction(async (transaction) => {
+        await this.lockShipment(transaction, dto.shipmentId);
+        // Idempotency check C09
+        const existing = await transaction.warehouseTransfer.findUnique({
+          where: {
+            createdById_clientRequestId: {
+              createdById: actor.id,
+              clientRequestId: dto.clientRequestId,
+            },
+          },
+          include: warehouseTransferResponseInclude,
+        });
+        if (existing) {
+          this.assertTransferIdempotency(existing, warehouseId, dto);
+          return existing;
+        }
+
+        const activeTransfer = await transaction.warehouseTransfer.findFirst({
+          where: {
+            shipmentId: dto.shipmentId,
+            status: { in: [WarehouseTransferStatus.PENDING, WarehouseTransferStatus.IN_TRANSIT] },
+          },
+          include: warehouseTransferResponseInclude,
+        });
+        if (activeTransfer) {
+          this.assertActiveTransferMatches(activeTransfer, warehouseId, dto);
+          return activeTransfer;
+        }
+
+        if (dto.toWarehouseId === warehouseId) {
+          throw new BadRequestException({
+            code: 'TRANSFER_SAME_WAREHOUSE',
+            message: 'Destination warehouse cannot be the same as the origin warehouse',
+          });
+        }
+
+        const [fromWarehouse, toWarehouse] = await Promise.all([
+          transaction.warehouse.findUnique({ where: { id: warehouseId } }),
+          transaction.warehouse.findUnique({ where: { id: dto.toWarehouseId } }),
+        ]);
+
+        if (!fromWarehouse || !fromWarehouse.isActive) {
+          throw new NotFoundException({
+            code: 'ORIGIN_WAREHOUSE_NOT_FOUND',
+            message: 'Origin warehouse not found or inactive',
+          });
+        }
+        if (!toWarehouse || !toWarehouse.isActive) {
+          throw new NotFoundException({
+            code: 'DESTINATION_WAREHOUSE_NOT_FOUND',
+            message: 'Destination warehouse not found or inactive',
+          });
+        }
+
+        const shipment = await transaction.shipment.findUnique({
+          where: { id: dto.shipmentId },
+        });
+        if (!shipment) {
+          throw new NotFoundException({
+            code: 'SHIPMENT_NOT_FOUND',
+            message: 'Shipment not found',
+          });
+        }
+
+        if (shipment.currentWarehouseId !== warehouseId) {
+          throw new ConflictException({
+            code: 'SHIPMENT_NOT_AT_ORIGIN_WAREHOUSE',
+            message: 'Shipment is not currently located at this warehouse',
+          });
+        }
+
+        this.transitionPolicy.assertTransferCreatable(shipment.status);
+
+        if (!shipment.destinationWarehouseId) {
+          throw new ConflictException({
+            code: 'DESTINATION_WAREHOUSE_REQUIRED',
+            message: 'Sort and confirm the destination warehouse before creating a transfer',
+          });
+        }
+        if (shipment.destinationWarehouseId !== dto.toWarehouseId) {
+          throw new ConflictException({
+            code: 'TRANSFER_DESTINATION_MISMATCH',
+            message: 'Transfer destination must match the shipment sorting destination',
+          });
+        }
+
+        const transferCode = `TRF-${Date.now().toString(36).toUpperCase()}-${Math.random()
+          .toString(36)
+          .substring(2, 6)
+          .toUpperCase()}`;
+
         const created = await transaction.warehouseTransfer.create({
           data: {
             transferCode,
@@ -1426,6 +1431,15 @@ export class WarehousesService {
       code: 'UNAUTHORIZED_ROLE',
       message: 'Access denied',
     });
+  }
+
+  private async lockShipment(
+    transaction: Prisma.TransactionClient,
+    shipmentId: string,
+  ): Promise<void> {
+    await transaction.$queryRaw`
+      SELECT "id" FROM "Shipment" WHERE "id" = ${shipmentId}::uuid FOR UPDATE
+    `;
   }
 
   private async updateShipmentConditionally(

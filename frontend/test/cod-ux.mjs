@@ -60,7 +60,7 @@ try {
     } else if (path.endsWith('/notifications')) data = { items: [], unreadCount: 0, total: 0 };
     else if (path.includes('/shipping-fee-payments/')) data = { availableActions: { createPayment: false }, payment: null };
     else if (path.endsWith('/cod/mine') || path.endsWith('/cod/dashboard')) data = {
-      items: [{ ...cod(), shipment: { trackingCode: 'SHP-COD-TEST', customer: { fullName: 'COD Customer' } }, collectedByDriver: { user: { fullName: 'COD Driver' } } }], summary: [],
+      items: [{ ...cod(), shipment: { trackingCode: 'SHP-COD-TEST', customer: { fullName: 'COD Customer' } }, collectedByDriver: { user: { fullName: 'COD Driver' } } }], summary: [], page: 1, limit: 20, total: 1, totalPages: 1,
     };
     else if (path.endsWith('/cod/shipments/cod')) data = { ...cod(), collectedAt: now, remittedAt: status === 'COLLECTED' ? null : now, settledAt: status === 'SETTLED' ? now : null };
     else if (path.endsWith('/dashboards/customer')) data = { overview: {
