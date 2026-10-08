@@ -13,6 +13,7 @@ import { ControlTowerQueryDto } from '../src/modules/dashboards/control-tower-qu
 import { controlTowerPolicy } from '../src/modules/dashboards/control-tower.policy.js';
 import { controlTowerQuery } from '../src/modules/dashboards/control-tower.query.js';
 import type { ControlTowerSnapshot } from '../src/modules/dashboards/control-tower.response.js';
+import { assertDisposablePostgresDatabase } from './disposable-database.js';
 
 jest.setTimeout(120000);
 
@@ -78,15 +79,7 @@ describe('Control Tower PostgreSQL / HTTP', () => {
   }
 
   beforeAll(async () => {
-    const url = new URL(process.env.DATABASE_URL ?? 'http://invalid');
-    if (
-      !['localhost', '127.0.0.1'].includes(url.hostname) ||
-      !url.pathname.startsWith('/p0_regression_')
-    ) {
-      throw new Error(
-        'Run only through backend/test/p0-local.mjs against its disposable localhost database',
-      );
-    }
+    assertDisposablePostgresDatabase(process.env);
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = ref.createNestApplication();
     app.setGlobalPrefix('api/v1');

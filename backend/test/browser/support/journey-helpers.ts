@@ -153,17 +153,126 @@ export async function runOriginWarehouseFlow(
   await expect(transferDialog).toBeVisible();
   await transferDialog.getByLabel('Ghi chú vận hành (tùy chọn)').fill('Phase F browser transfer');
   await transferDialog.getByRole('button', { name: 'Tạo transfer chờ xuất' }).click();
-  await expect(page.getByText(/Đã tạo chuyến.*đang chờ xác nhận xuất kho/)).toBeVisible();
+  await expect(transferDialog).not.toBeVisible();
 
   const outboundPanel = page.getByRole('tabpanel', { name: /Chuyển đi/ });
   const outboundRow = outboundPanel.locator('tr', { hasText: trackingCode });
   await expect(outboundRow.getByText('Chờ xuất kho', { exact: true })).toBeVisible();
-  await outboundRow.getByRole('button', { name: 'Dispatch / xuất kho' }).click();
-  const dispatchDialog = page.getByRole('dialog', { name: /Xuất kho/ });
-  await expect(dispatchDialog.getByText(/Shipment chuyển sang IN_TRANSIT/)).toBeVisible();
-  await dispatchDialog.getByRole('button', { name: 'Xác nhận Dispatch' }).click();
-  await expect(page.getByText(/kiện hàng đang trung chuyển/)).toBeVisible();
-  await expect(outboundPanel.getByText('Đang trung chuyển', { exact: true }).first()).toBeVisible();
+  await expect(outboundRow.getByRole('button', { name: 'Dispatch / xuất kho' })).toHaveCount(0);
+}
+
+export async function prepareAndDispatchLineHaul(
+  page: Page,
+  fixture: PhaseFFixture,
+  transferId: string,
+): Promise<string> {
+  await page.goto('/dispatcher/line-haul');
+  await page.locator('#line-haul-origin').selectOption(fixture.warehouseIds.origin);
+  await page.locator('#line-haul-destination').selectOption(fixture.warehouseIds.destination);
+  await page.locator('#line-haul-driver').selectOption(fixture.lineHaulDriverId);
+  await page.locator('#line-haul-vehicle').selectOption(fixture.lineHaulVehicleId);
+  await page.getByRole('button', { name: 'Kiểm tra và lập chuyến', exact: true }).click();
+  const [created] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/v1/line-haul/trips' &&
+        response.request().method() === 'POST',
+    ),
+    page
+      .getByRole('dialog', { name: 'Xác nhận lập chuyến liên kho' })
+      .getByRole('button', { name: 'Lập chuyến', exact: true })
+      .click(),
+  ]);
+  expect(created.status()).toBe(201);
+  const { data: trip } = (await created.json()) as { data: { id: string; status: string } };
+  expect(trip.status).toBe('PLANNED');
+  await expect(page).toHaveURL(new RegExp(`/dispatcher/line-haul/${trip.id}$`));
+  await page.locator('#eligible-transfer').selectOption(transferId);
+  await page.getByRole('button', { name: 'Gán vào chuyến', exact: true }).click();
+  const [assigned] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/api/v1/line-haul/trips/${trip.id}/transfers` &&
+        response.request().method() === 'POST',
+    ),
+    page
+      .getByRole('dialog', { name: 'Xác nhận gán WarehouseTransfer' })
+      .getByRole('button', { name: 'Gán transfer', exact: true })
+      .click(),
+  ]);
+  expect(assigned.status()).toBe(200);
+  await expect(page.getByRole('button', { name: 'Mark Ready', exact: true })).toHaveCount(0);
+  const start = Date.now() + 24 * 60 * 60 * 1_000;
+  await page.locator('#line-haul-scheduled-start').fill(new Date(start).toISOString().slice(0, 16));
+  await page
+    .locator('#line-haul-scheduled-end')
+    .fill(new Date(start + 2 * 60 * 60 * 1_000).toISOString().slice(0, 16));
+  const [scheduled] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/api/v1/line-haul/trips/${trip.id}/schedule` &&
+        response.request().method() === 'POST',
+    ),
+    page.getByRole('button', { name: 'Lên lịch', exact: true }).click(),
+  ]);
+  expect(scheduled.status()).toBe(200);
+  expect(await scheduled.json()).toMatchObject({
+    data: { status: 'PLANNED', availableActions: { markReady: true } },
+  });
+  for (const step of [
+    {
+      button: 'Mark Ready',
+      dialog: 'Mark Ready chuyến liên kho',
+      confirm: 'Khóa manifest',
+      command: 'prepare',
+      status: 'READY',
+    },
+    {
+      button: 'Dispatch chuyến',
+      dialog: 'Xác nhận xe rời kho',
+      confirm: 'Dispatch chuyến',
+      command: 'dispatch',
+      status: 'IN_TRANSIT',
+    },
+  ]) {
+    await page.getByRole('button', { name: step.button, exact: true }).click();
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (candidate) =>
+          new URL(candidate.url()).pathname ===
+            `/api/v1/line-haul/trips/${trip.id}/${step.command}` &&
+          candidate.request().method() === 'POST',
+      ),
+      page
+        .getByRole('dialog', { name: step.dialog })
+        .getByRole('button', { name: step.confirm, exact: true })
+        .click(),
+    ]);
+    expect(response.status()).toBe(200);
+    expect(await response.json()).toMatchObject({ data: { status: step.status } });
+  }
+  await expect(page.getByText('Đang chạy tuyến', { exact: true })).toBeVisible();
+  return trip.id;
+}
+
+export async function arriveLineHaulThroughBrowser(page: Page, tripId: string): Promise<void> {
+  await page.goto(`/warehouse/line-haul/${tripId}`);
+  await page.getByRole('button', { name: 'Xác nhận xe đến', exact: true }).click();
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (candidate) =>
+        new URL(candidate.url()).pathname === `/api/v1/line-haul/trips/${tripId}/arrive` &&
+        candidate.request().method() === 'POST',
+    ),
+    page
+      .getByRole('dialog', { name: 'Xác nhận arrival' })
+      .getByRole('button', { name: 'Xác nhận xe đến', exact: true })
+      .click(),
+  ]);
+  expect(response.status()).toBe(200);
+  expect(await response.json()).toMatchObject({ data: { status: 'ARRIVED' } });
+  await expect(page.getByText('Đã đến kho đích', { exact: true })).toBeVisible();
+  await page.goto('/warehouse/workspace');
 }
 
 export async function runDestinationWarehouseFlow(page: Page, trackingCode: string): Promise<void> {

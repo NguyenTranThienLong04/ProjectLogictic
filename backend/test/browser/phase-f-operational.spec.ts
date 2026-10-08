@@ -8,7 +8,9 @@ import {
   type RoleBrowserSession,
 } from './support/browser-session.js';
 import {
+  arriveLineHaulThroughBrowser,
   createShipmentThroughBrowser,
+  prepareAndDispatchLineHaul,
   runDestinationWarehouseFlow,
   runOriginWarehouseFlow,
   waitForShipmentStatus,
@@ -228,8 +230,53 @@ test.describe('Phase F browser-driven operational validation', () => {
       );
       await expectNoHorizontalOverflow(originWarehouse.page);
 
-      await destinationWarehouse.page.reload();
+      const pending = await fixture.transferState(shipment.id);
+      expect(pending).toMatchObject({
+        status: 'PENDING',
+        dispatchedAt: null,
+        lineHaulTripAssignments: [],
+        shipment: {
+          status: 'AT_ORIGIN_WAREHOUSE',
+          currentWarehouseId: fixture.warehouseIds.origin,
+        },
+      });
+      await api.expectTransferCommandRejected(
+        fixture.actors.originStaff,
+        fixture.warehouseIds.origin,
+        pending.id,
+        'dispatch',
+        'LINE_HAUL_TRIP_REQUIRED',
+      );
+      expect(await fixture.transferState(shipment.id)).toEqual(pending);
+      const tripId = await prepareAndDispatchLineHaul(dispatcher.page, fixture, pending.id);
+      const inTransit = await fixture.transferState(shipment.id);
+      expect(inTransit).toMatchObject({
+        status: 'IN_TRANSIT',
+        shipment: { status: 'IN_TRANSIT', currentWarehouseId: null },
+        lineHaulTripAssignments: [{ tripId, trip: { status: 'IN_TRANSIT' } }],
+      });
+      await api.expectTransferCommandRejected(
+        fixture.actors.destinationStaff,
+        fixture.warehouseIds.destination,
+        pending.id,
+        'receive',
+        'LINE_HAUL_TRIP_NOT_ARRIVED',
+      );
+      expect(await fixture.transferState(shipment.id)).toEqual(inTransit);
+      await arriveLineHaulThroughBrowser(destinationWarehouse.page, tripId);
+      expect(await fixture.transferState(shipment.id)).toMatchObject({
+        status: 'IN_TRANSIT',
+        shipment: { status: 'IN_TRANSIT', currentWarehouseId: null },
+        lineHaulTripAssignments: [{ tripId, trip: { status: 'ARRIVED' } }],
+      });
       await runDestinationWarehouseFlow(destinationWarehouse.page, shipment.trackingCode);
+      expect(await fixture.transferState(shipment.id)).toMatchObject({
+        status: 'COMPLETED',
+        shipment: {
+          status: 'AWAITING_DELIVERY_ASSIGNMENT',
+          currentWarehouseId: fixture.warehouseIds.destination,
+        },
+      });
       await expectNoHorizontalOverflow(destinationWarehouse.page);
 
       const deliveryDriver = register(

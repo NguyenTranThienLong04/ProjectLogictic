@@ -24,8 +24,10 @@ npm run db:generate
 npm run lint
 npm run typecheck
 npm test
+node --experimental-strip-types --test backend/test/disposable-database.test.mjs
 node --test backend/scripts/migration-integrity.test.mjs
 node --test backend/scripts/engine-io-security.test.mjs
+node --test backend/scripts/nyc-config-override.test.mjs
 node --experimental-strip-types --test deploy/release-provenance.test.mjs
 node backend/scripts/migration-integrity.mjs
 node deploy/ci/databases.mjs

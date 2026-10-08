@@ -34,11 +34,15 @@
     "multer": "2.4.0",
     "deepmerge-ts": "8.0.2",
     "mysql2": "3.24.4",
-    "js-yaml@^3": "3.15.2",
     "js-yaml@^4": "4.3.2",
     "@nestjs/swagger": {
       "js-yaml": "5.4.1"
     },
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "4.3.2"
+    },
+    "proxy-addr": "2.0.8",
+    "source-map-js": "1.2.2",
     "socket.io": {
       "engine.io": "6.6.10"
     },

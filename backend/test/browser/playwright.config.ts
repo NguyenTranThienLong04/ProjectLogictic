@@ -44,6 +44,7 @@ export default defineConfig({
         ROUTE_PROVIDER_BASE_URL: 'http://127.0.0.1:5100',
         PAYMENT_PROVIDER: 'TEST',
         PAYMENT_TEST_WEBHOOK_SECRET: 'phase-h3-browser-test-webhook-secret-32-characters',
+        LINE_HAUL_ENFORCEMENT_FROM: '2026-01-01T00:00:00.000Z',
       },
       url: 'http://127.0.0.1:3000/api/v1/health/ready',
       reuseExistingServer: !process.env.CI,

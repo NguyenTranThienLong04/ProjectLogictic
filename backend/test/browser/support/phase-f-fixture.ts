@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
 import {
+  DriverCapability,
   DriverStatus,
   PrismaClient,
   ShippingFeePayer,
@@ -18,6 +19,7 @@ export type PhaseFActorName =
   | 'dispatcher'
   | 'originStaff'
   | 'destinationStaff'
+  | 'lineHaul'
   | 'pickupNear'
   | 'pickupFar'
   | 'pickupWrongArea'
@@ -65,6 +67,8 @@ export class PhaseFFixture {
     string
   >;
   readonly pickupAddressLabel = 'Kho gửi Phase F';
+  readonly lineHaulVehicleId: string;
+  readonly lineHaulDriverId: string;
 
   private readonly prisma: PrismaClient;
   private readonly redis: Redis;
@@ -81,6 +85,8 @@ export class PhaseFFixture {
     redis: Redis;
     userIds: string[];
     customerId: string;
+    lineHaulVehicleId: string;
+    lineHaulDriverId: string;
   }) {
     this.actors = input.actors;
     this.warehouseIds = input.warehouseIds;
@@ -90,6 +96,8 @@ export class PhaseFFixture {
     this.redis = input.redis;
     this.userIds = input.userIds;
     this.customerId = input.customerId;
+    this.lineHaulVehicleId = input.lineHaulVehicleId;
+    this.lineHaulDriverId = input.lineHaulDriverId;
     this.createdWarehouseIds = Object.values(input.warehouseIds);
   }
 
@@ -102,6 +110,7 @@ export class PhaseFFixture {
       dispatcher: 'Phase F Dispatcher',
       originStaff: 'Phase F Origin Staff',
       destinationStaff: 'Phase F Destination Staff',
+      lineHaul: 'Phase F Line Haul',
       pickupNear: 'Phase F Pickup Near',
       pickupFar: 'Phase F Pickup Far',
       pickupWrongArea: 'Phase F Pickup Wrong Area',
@@ -302,6 +311,28 @@ export class PhaseFFixture {
         driverNames.map((name) => [name, driverIdFor(name)]),
       ) as PhaseFFixture['driverIds'];
 
+      const lineHaulDriver = await prisma.driverProfile.create({
+        data: {
+          userId: userId('lineHaul'),
+          operatingWarehouseId: warehouseIds.origin,
+          employeeCode: `F-LH-${suffix}`,
+          vehicleType: 'TRUCK',
+          vehiclePlate: `FLH-${suffix}`,
+          capabilities: [DriverCapability.LINE_HAUL],
+          status: DriverStatus.AVAILABLE,
+          isAvailable: true,
+          isOnline: true,
+        },
+      });
+      const lineHaulVehicle = await prisma.lineHaulVehicle.create({
+        data: {
+          vehicleCode: `F-LH-${suffix}`,
+          licensePlate: `FLH-${suffix}`,
+          vehicleType: 'TRUCK',
+          capacityWeightGrams: 1_000_000,
+        },
+      });
+
       await prisma.customerAddress.create({
         data: {
           customerId: userId('customer'),
@@ -327,6 +358,8 @@ export class PhaseFFixture {
         redis,
         userIds: users.map(({ id }) => id),
         customerId: userId('customer'),
+        lineHaulDriverId: lineHaulDriver.id,
+        lineHaulVehicleId: lineHaulVehicle.id,
       });
     } catch (error) {
       redis.disconnect();
@@ -373,6 +406,7 @@ export class PhaseFFixture {
     if (userIds.length > 0) {
       await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
     }
+    await PhaseFFixture.cleanupLineHaul(prisma, userIds);
     if (shipmentIds.length > 0) {
       await prisma.shipmentProof.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
       await prisma.deliveryAttempt.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
@@ -430,6 +464,35 @@ export class PhaseFFixture {
     };
   }
 
+  async transferState(shipmentId: string) {
+    return this.prisma.warehouseTransfer.findFirstOrThrow({
+      where: { shipmentId },
+      include: {
+        shipment: { select: { status: true, version: true, currentWarehouseId: true } },
+        lineHaulTripAssignments: {
+          where: { isActive: true },
+          select: { tripId: true, trip: { select: { status: true } } },
+        },
+      },
+    });
+  }
+
+  private static async cleanupLineHaul(prisma: PrismaClient, userIds: string[]): Promise<void> {
+    const trips = await prisma.lineHaulTrip.findMany({
+      where: { createdById: { in: userIds } },
+      select: { id: true },
+    });
+    const tripIds = trips.map(({ id }) => id);
+    await prisma.lineHaulTripTransfer.deleteMany({ where: { tripId: { in: tripIds } } });
+    await prisma.lineHaulTrip.updateMany({
+      where: { id: { in: tripIds } },
+      data: { currentRouteId: null },
+    });
+    await prisma.lineHaulTripRoute.deleteMany({ where: { tripId: { in: tripIds } } });
+    await prisma.lineHaulTrip.deleteMany({ where: { id: { in: tripIds } } });
+    await prisma.lineHaulVehicle.deleteMany({ where: { vehicleCode: { startsWith: 'F-LH-' } } });
+  }
+
   async cleanup(): Promise<void> {
     const shipments = await this.prisma.shipment.findMany({
       where: { customerId: this.customerId },
@@ -446,6 +509,7 @@ export class PhaseFFixture {
     if (redisKeys.length > 0) await this.redis.del(...redisKeys);
 
     await this.prisma.notification.deleteMany({ where: { userId: { in: this.userIds } } });
+    await PhaseFFixture.cleanupLineHaul(this.prisma, this.userIds);
     if (shipmentIds.length > 0) {
       await this.prisma.shipmentProof.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
       await this.prisma.deliveryAttempt.deleteMany({ where: { shipmentId: { in: shipmentIds } } });

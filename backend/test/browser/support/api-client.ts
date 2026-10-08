@@ -100,4 +100,20 @@ export class PhaseFApiClient {
   async dispose(): Promise<void> {
     await this.context.dispose();
   }
+
+  async expectTransferCommandRejected(
+    actor: PhaseFActor,
+    warehouseId: string,
+    transferId: string,
+    command: 'dispatch' | 'receive',
+    code: string,
+  ): Promise<void> {
+    const accessToken = await this.login(actor);
+    const response = await this.context.post(
+      `/api/v1/warehouses/${warehouseId}/transfers/${transferId}/${command}`,
+      { headers: { Authorization: `Bearer ${accessToken}` }, data: {} },
+    );
+    expect(response.status()).toBe(409);
+    expect(await response.json()).toMatchObject({ code });
+  }
 }
