@@ -1,6 +1,6 @@
-# Deployment runbook — Phase I2 staging preparation
+# Deployment runbook
 
-I2 chuẩn bị release engineering, không thêm feature và không deploy production. Baseline ứng dụng ở [PRODUCTION_READINESS_I1.md](PRODUCTION_READINESS_I1.md); điều tra migration và kết quả I2 ở [RELEASE_ENGINEERING_I2.md](RELEASE_ENGINEERING_I2.md). Không promote khi bất kỳ gate nào fail hoặc chưa có bằng chứng.
+Runbook cho release được review và cho phép triển khai riêng. Bằng chứng local hiện tại ở [F07/F08](F07_F08_HARDENING_20261009.md); SHA, hosted CI/staging còn chờ và giới hạn closure ở [FINAL_PROJECT_CLOSURE_20261009.md](FINAL_PROJECT_CLOSURE_20261009.md). Backup/PITR và quy trình restore DB cô lập ở [BACKUP_RESTORE.md](BACKUP_RESTORE.md). Không promote khi bất kỳ gate nào fail hoặc chưa có bằng chứng. Việc sửa tài liệu này không cho phép push/deploy/reset staging.
 
 ## Release topology and infrastructure
 
@@ -69,12 +69,12 @@ Các TTL/timeout/cache/routing/deviation khác có default đã validate ở `en
 
 ## Migration and deployment order
 
-1. Freeze/review toàn bộ A→H3 + I1 + I2 thành release commit, bao gồm các file/migration hiện chưa tracked. Dùng lockfile; không deploy từ working tree chưa review. Bảo vệ main/master bằng required check `release-gate` của `.github/workflows/release.yml`; cấm bypass và yêu cầu review thay đổi workflow/manifest. CI không publish image hoặc deploy tự động.
-2. Provision staging cùng topology production; inject env staging; restore backup representative vào staging. Xác minh connection role, TLS, extensions, counts, constraint violations và capacity legacy cần cấu hình.
+1. Review đúng phạm vi và tạo release commit riêng; loại thay đổi ngoài phạm vi. Dùng lockfile; không deploy từ working tree chưa review. Bảo vệ main/master bằng required check `release-gate` của `.github/workflows/release.yml`; cấm bypass và yêu cầu review thay đổi workflow/manifest. Image publication cần yêu cầu manual rõ ràng; CI không deploy.
+2. Chuẩn bị môi trường đích cùng topology production và secrets riêng. Restore backup representative chỉ vào **DB/branch phục hồi mới, cô lập**, theo [runbook](BACKUP_RESTORE.md), không restore đè staging đang hoạt động. Xác minh connection role, TLS, extensions, counts, constraint violations và capacity legacy cần cấu hình.
 3. Chạy `npm ci`, `npm run db:generate`, unit/E2E/Playwright/lint/typecheck/build/audit. Build không cần DB secret; kiểm tra `backend/dist/main.js` và `frontend/dist/index.html`.
 4. Migration/deploy jobs chỉ chạy **Linux/container**. Windows Application Control là giới hạn workstation, không phải điều kiện tắt security hay sửa Prisma cho production. CI chạy Prisma deploy hai lần (lần hai no-op), status, checksum DB chỉ đọc, migration→schema diff và DB→schema diff; SQL replay hai DB độc lập bổ sung kiểm tra CHECK/index/enum. `SHADOW_DATABASE_URL` phải disposable riêng biệt, được Prisma 7 đọc qua `prisma.config.ts`.
-5. Staging mới dùng DB sạch và bộ 25 SQL canonical khóa trong `backend/prisma/migrations.manifest.json`. Một migration job duy nhất chạy image target `migration` với `DIRECT_URL`; entrypoint `deploy/migrate.sh` kiểm tra history trước deploy (cho phép pending), deploy, status và checksum sau deploy. Không startup-migrate, `migrate dev`, reset, db push hoặc seed demo. Không chạy job này trên production trong I2.
-6. H2/H3 development cũ vẫn mismatch và bị gate chặn. Xem reconciliation trong báo cáo I2: giữ nguyên DB cũ/history, không UPDATE/DELETE `_prisma_migrations`, không dùng `resolve --applied` để che checksum. Không clone nguyên history lệch vào staging rồi triển khai. Nếu enum đã commit nhưng phần sau thất bại, khóa promotion, snapshot và điều tra; không retry mù.
+5. Môi trường mới dùng DB mới và toàn bộ SQL canonical khóa trong `backend/prisma/migrations.manifest.json` (**28 migrations tại 2026-10-09**). Môi trường hiện hữu giữ nguyên dữ liệu/history và chỉ áp dụng migration pending đã review. Một migration job duy nhất chạy image target `migration` với `DIRECT_URL`; entrypoint `deploy/migrate.sh` kiểm tra history trước deploy (cho phép pending), deploy, status và checksum sau deploy. Không startup-migrate, `migrate dev`, reset, db push hoặc seed demo. F07/F08/F09/F06 không thêm migration; không tự chạy migration vào staging/production.
+6. Nếu DB cũ có mismatch/unresolved/unknown history, khóa promotion và điều tra theo gate; giữ nguyên DB/history, không UPDATE/DELETE `_prisma_migrations`, không dùng `resolve --applied` để che checksum. Ngoại lệ legacy chỉ được dùng đúng quy trình/đối tượng đã review trong migration-integrity tooling, không mở rộng để bỏ qua lỗi. Nếu enum đã commit nhưng phần sau thất bại, snapshot và điều tra; không retry mù.
 7. Start API với providers disabled, chờ ready; publish frontend có URL production và REAL. Smoke auth/cookie/RBAC, lifecycle/cash shipping fee/COD, Socket reconnect/revocation, GPS freshness, liveness/readiness, reverse-proxy rate limits; xác minh không có simulation UI.
 8. Chỉ mở traffic sau khi migration gate, health, SMTP recovery flow và operational smoke đều pass. Drain connections/workers trước khi dừng instance; diễn tập SIGTERM ở runtime đích. I1 Windows process termination không chứng minh Linux graceful shutdown.
 
@@ -82,7 +82,7 @@ Rollback: giữ artifact trước và backup/PITR; chỉ rollback code nếu tư
 
 ## Linux CI and artifacts
 
-`.github/workflows/release.yml` dùng Ubuntu + Node 22, PostgreSQL 17 và Redis 7.4 disposable. `deploy/ci/verify.sh` thực thi tuần tự install → lint → typecheck → unit → E2E → production build → migration validation → Playwright/smoke → audit. Migration fixture setup chạy trước E2E; replay release độc lập chạy sau build. `set -euo pipefail` và job cuối `release-gate` chặn fail/cancel/skip. Full Playwright không retry; OSRM/TEST/SIMULATION chỉ dùng trong bài kiểm thử development, không bake vào artifact.
+`.github/workflows/release.yml` dùng Ubuntu + Node 22, PostgreSQL 17 và Redis 7.4 disposable. `deploy/ci/verify.sh` thực thi install → lint/typecheck/unit → fixture migrations/E2E → migration replay/parity → Playwright và bảy nhóm browser regression → production build/smoke → audit. Build cuối thực hiện sau khi dev servers dừng để giữ release metadata. `set -euo pipefail` và job cuối `release-gate` chặn fail/cancel/skip. Full Playwright không retry; OSRM/TEST/SIMULATION chỉ dùng trong bài kiểm thử development, không bake vào artifact.
 
 `Dockerfile` có targets `ci`, `migration`, `backend`, `frontend`. Build context loại `.env*`, node_modules, generated client, dist, Git và log. Backend chạy bằng user `node`, chỉ có compiled JS và production dependencies; không Prisma CLI, migration credential hoặc auto migration. Frontend Nginx phục vụ Vite production build cùng origin, SPA fallback, immutable hashed assets; `/api/*` giữ nguyên prefix và `/socket.io/*` chuyển Upgrade với timeout 75s. Backend healthcheck yêu cầu DB và Redis đều `up`, chặn cả HTTP 200 `degraded` khi promotion.
 
@@ -104,7 +104,7 @@ I3 adds explicit GHCR publication through `workflow_dispatch` with `publish_imag
 
 User/operator cần provision qua secret manager/control plane, **không gửi secret trong chat**:
 
-- Git repository/runner Linux, required `release-gate`, registry và quyền push/pull; review/release commit chứa đầy đủ các thay đổi A→I2 đang chưa commit.
+- Git repository/runner Linux, required `release-gate`, registry và quyền push/pull; source SHA/digests đúng release đã review.
 - PostgreSQL staging riêng (ưu tiên DB sạch), pooled runtime role, direct migration role có DDL/`btree_gist`, shadow DB disposable riêng; TLS verify-full, network ACL và runtime grants cho bảng/sequence. Không tái dùng DB/history development lệch.
 - Redis standalone staging với TLS/ACL, `noeviction`, mạng riêng, BullMQ TCP/Lua/blocking access; theo dõi memory/queue backlog. Queue chứa reset token tạm thời nên cần bảo vệ dữ liệu.
 - SMTP host/port/TLS/account, sender/domain và hộp thư kiểm chứng password reset; bật `EMAIL_DELIVERY_ENABLED=true` sau provision.
@@ -115,7 +115,7 @@ User/operator cần provision qua secret manager/control plane, **không gửi s
 Checklist áp dụng trên **đúng source SHA, image digest và môi trường staging**; mỗi mục lưu evidence/run URL, thời điểm và operator:
 
 - [ ] Clean release checkout chạy toàn bộ CI, audit và `release-gate` PASS; image digests tương ứng, không gate skip/fail.
-- [ ] Migration manifest/Git baseline clean; Prisma replay 25/25, status, checksum và drift PASS; staging preflight không có mismatch/unresolved/unknown rows. Snapshot trước migration; migration job độc quyền.
+- [ ] Migration manifest/Git baseline clean; Prisma replay toàn bộ manifest (hiện 28/28), status, checksum và drift PASS; staging preflight không có mismatch/unresolved/unknown rows ngoài ngoại lệ legacy được review chính xác. Snapshot trước migration; migration job độc quyền.
 - [ ] Secrets/SMTP/TLS/roles/network ACL được provision; không có secret trong source, image, frontend hoặc logs.
 - [ ] Backup/PITR và restore drill đạt RPO/RTO; giữ previous image digests và export migration history chỉ đọc.
 - [ ] Backend start/health `status=ok`, DB/Redis `up`, frontend health OK; shutdown/restart/drain trên staging được quan sát.

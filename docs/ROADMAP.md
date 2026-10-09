@@ -37,6 +37,6 @@ Driver route optimization
 | G3C1–G3C3 | Integer weight capacity, half-open scheduling and reviewed planning recommendations | Completed |
 | H1–H2 | Independent shipping-fee cash collection and reconciliation | Completed |
 | H3 | Provider-neutral online payment contract, test-only adapter and webhook authority | Completed at provider boundary; production payment disabled |
-| I1 | Final production readiness audit, regression fixes, full verification and release runbook | Audit only; see [I1 report](PRODUCTION_READINESS_I1.md) for PASS/BLOCKER |
+| I1 | Final production readiness audit, regression fixes, full verification and release runbook | Historical audit phase; current PASS/pending scope is recorded in [final closure](FINAL_PROJECT_CLOSURE_20261009.md) |
 
 Stop after I1. Production deployment, vendor selection, horizontal scaling and advanced features require a new explicit request; I1 does not authorize deployment.

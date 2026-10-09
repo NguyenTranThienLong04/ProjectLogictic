@@ -68,7 +68,7 @@ Example: `GET /api/v1/control-tower?entityType=SHIPMENT&slaState=OVERDUE&page=1&
 - Exact Shipment: `/admin/shipments/:id`, `/dispatcher/shipments/:id`.
 - Exact Transfer: `/{admin|dispatcher}/warehouses/:warehouseId/transfers/:id` (new read-only detail).
 - Exact Trip: `/admin/line-haul/trips/:id`, `/dispatcher/line-haul/:id`.
-- Screenshots (local fixture data, actual production components): [Admin desktop](../test-results/control-tower/admin-1440.png), [Admin tablet](../test-results/control-tower/admin-768.png), [Admin mobile](../test-results/control-tower/admin-375.png), [Dispatcher desktop](../test-results/control-tower/dispatcher-1440.png), [Dispatcher tablet](../test-results/control-tower/dispatcher-768.png), [Dispatcher mobile](../test-results/control-tower/dispatcher-375.png).
+- Screenshots use local fixture data and actual production components. Local-only evidence (ignored, not published in Git): `test-results/control-tower/admin-{1440,768,375}.png` and `test-results/control-tower/dispatcher-{1440,768,375}.png`. These are workstation artifacts, not public gallery links.
 
 ## Verification
 
