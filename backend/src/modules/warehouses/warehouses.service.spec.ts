@@ -13,6 +13,7 @@ import { WarehousesService } from './warehouses.service.js';
 import { WarehouseTransferLifecycleService } from './warehouse-transfer-lifecycle.service.js';
 import { WarehouseTransferFlowPolicy } from './warehouse-transfer-flow.policy.js';
 import { ConfigService } from '@nestjs/config';
+import { ListWarehouseTransfersDto } from './dto/list-warehouse-transfers.dto.js';
 
 type MockFunction = jest.Mock<(...args: never[]) => Promise<unknown>>;
 type MockRepository = Record<string, MockFunction>;
@@ -1127,12 +1128,12 @@ describe('WarehousesService', () => {
       await expect(
         service.listWarehouseShipments('wh-2', { page: 1, limit: 20 }, mockStaff),
       ).rejects.toBeInstanceOf(ForbiddenException);
-      await expect(service.listTransfers('wh-2', 'all', mockStaff)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
-      await expect(service.listInboundQueue('wh-2', mockStaff)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(
+        service.listTransfers('wh-2', new ListWarehouseTransfersDto(), mockStaff),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.listInboundQueue('wh-2', new ListWarehouseTransfersDto(), mockStaff),
+      ).rejects.toBeInstanceOf(ForbiddenException);
       await expect(
         service.listExceptions('wh-2', { page: 1, limit: 20 }, mockStaff),
       ).rejects.toBeInstanceOf(ForbiddenException);

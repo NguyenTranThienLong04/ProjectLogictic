@@ -21,6 +21,10 @@ import { AssignWarehouseStaffDto } from './dto/assign-warehouse-staff.dto.js';
 import { CreateTransferDto } from './dto/create-transfer.dto.js';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto.js';
 import { ListWarehouseShipmentsDto } from './dto/list-warehouse-shipments.dto.js';
+import {
+  ListIncomingTransfersDto,
+  ListWarehouseTransfersDto,
+} from './dto/list-warehouse-transfers.dto.js';
 import { ListWarehouseExceptionsDto } from './dto/list-warehouse-exceptions.dto.js';
 import { ListWarehousesDto } from './dto/list-warehouses.dto.js';
 import { LookupCheckInShipmentDto } from './dto/lookup-check-in-shipment.dto.js';
@@ -284,13 +288,16 @@ export class WarehousesController {
 
   @Get(':id/transfers')
   @Roles(UserRole.WAREHOUSE_STAFF, UserRole.DISPATCHER, UserRole.ADMIN)
-  @ApiOperation({ summary: 'List transfers of a warehouse' })
+  @ApiOperation({
+    summary: 'Paginate transfers within warehouse scope by direction, status and code',
+  })
+  @ApiOkResponse({ description: 'items, page, limit, total and totalPages' })
   listTransfers(
     @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
-    @Query('direction') direction?: 'inbound' | 'outbound' | 'all',
+    @Query() query: ListWarehouseTransfersDto,
   ) {
-    return this.warehousesService.listTransfers(id, direction, actor);
+    return this.warehousesService.listTransfers(id, query, actor);
   }
 
   // ==========================================
@@ -311,11 +318,16 @@ export class WarehousesController {
   @Get(':id/inbound-queue')
   @Roles(UserRole.WAREHOUSE_STAFF, UserRole.DISPATCHER, UserRole.ADMIN)
   @ApiOperation({ summary: 'List inbound queue (incoming transfers & picked-up shipments)' })
+  @ApiOkResponse({
+    description:
+      'Paginated incomingTransfers (items, page, limit, total, totalPages) and pickedUpShipments',
+  })
   listInboundQueue(
     @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: ListIncomingTransfersDto,
   ) {
-    return this.warehousesService.listInboundQueue(id, actor);
+    return this.warehousesService.listInboundQueue(id, query, actor);
   }
 
   @Get(':id/exceptions')

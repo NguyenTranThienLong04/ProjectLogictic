@@ -9,6 +9,8 @@ import type {
   PaginatedWarehouseExceptions,
   WarehouseStaffProfile,
   WarehouseTransfer,
+  TransferPage,
+  TransferFilters,
 } from './warehouse-types';
 
 export interface Paginated<T> {
@@ -211,11 +213,11 @@ export async function receiveTransfer(
 
 export async function listTransfers(
   warehouseId: string,
-  direction?: 'inbound' | 'outbound' | 'all',
-): Promise<WarehouseTransfer[]> {
-  const response = await api.get<ApiEnvelope<WarehouseTransfer[]>>(
+  params: TransferFilters = {},
+): Promise<TransferPage> {
+  const response = await api.get<ApiEnvelope<TransferPage>>(
     `/warehouses/${warehouseId}/transfers`,
-    { params: { direction } },
+    { params: { page: 1, limit: 20, ...params } },
   );
   return response.data.data;
 }
@@ -236,9 +238,13 @@ export async function listWarehouseShipments(
   return response.data.data;
 }
 
-export async function listInboundQueue(warehouseId: string): Promise<InboundQueue> {
+export async function listInboundQueue(
+  warehouseId: string,
+  params?: Pick<TransferFilters, 'page' | 'limit' | 'search'>,
+): Promise<InboundQueue> {
   const response = await api.get<ApiEnvelope<InboundQueue>>(
     `/warehouses/${warehouseId}/inbound-queue`,
+    { params },
   );
   return response.data.data;
 }

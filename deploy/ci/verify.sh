@@ -63,6 +63,7 @@ use_database i1_browser
 export REDIS_URL=redis://127.0.0.1:56379/1 I1_AUDIT=true
 npx playwright install --with-deps chromium
 npm run test:browser -- --retries=0
+npm run test:browser:regression
 unset I1_AUDIT
 # Nest watch used by browser tests clears dist, including immutable release metadata.
 # Build the final production artifacts only after those development servers stop.

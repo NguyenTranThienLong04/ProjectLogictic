@@ -37,9 +37,9 @@ try {
       if (path.endsWith('/notifications')) data = { items: [], total: 0, totalPages: 1, unreadCount: 0 };
       else if (path.endsWith('/staff/me')) data = { warehouseId: origin.id, warehouse: origin, user: { fullName: 'Warehouse Staff' } };
       else if (path.endsWith('/warehouses')) data = { items: [origin, destination], pagination: { totalPages: 1 } };
-      else if (path.endsWith('/inbound-queue')) data = { pickedUpShipments: [], incomingTransfers: [] };
+      else if (path.endsWith('/inbound-queue')) data = { pickedUpShipments: [], incomingTransfers: { items: [], total: 0, page: 1, limit: 20, totalPages: 0 } };
       else if (path.endsWith('/shipments')) data = { items: [], pagination: { totalPages: 1 } };
-      else if (path.endsWith('/transfers')) data = [transfer];
+      else if (path.endsWith('/transfers')) data = { items: [transfer], total: 1, page: 1, limit: 20, totalPages: 1 };
       else if (path.endsWith('/driver/location')) data = gps ? { driverId: 'driver', latitude: 10.775, longitude: 106.704, updatedAt: new Date().toISOString() } : null;
       else if (path.includes('/delivery-assignments/')) {
         detailReads++;

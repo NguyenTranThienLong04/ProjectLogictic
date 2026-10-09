@@ -14,6 +14,11 @@ export const warehouseShipmentInclude = {
     select: { id: true, code: true, name: true, city: true, isActive: true },
   },
   currentWarehouse: { select: { id: true, code: true, name: true, city: true } },
+  transfers: {
+    where: { status: { in: ['PENDING', 'IN_TRANSIT'] } },
+    select: { id: true, transferCode: true, status: true },
+    take: 1,
+  },
   driverAssignments: {
     where: { type: 'PICKUP', status: 'COMPLETED' },
     include: {

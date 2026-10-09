@@ -12,6 +12,8 @@ import { Input } from '../../../components/ui/input';
 import { LoadingState } from '../../../components/ui/loading-state';
 import { Modal } from '../../../components/ui/modal';
 import { PageHeader } from '../../../components/ui/page-header';
+import { Pagination } from '../../../components/ui/pagination';
+import { SearchFilter } from '../../../components/ui/search-filter';
 import { SelectField } from '../../../components/ui/select-field';
 import { WarehouseTransferStatusBadge } from '../../../components/ui/status-badge';
 import { ShipmentStatusBadge } from '../../../components/shipment-status-badge';
@@ -40,6 +42,7 @@ import type {
   WarehouseCatalogueItem,
   WarehouseShipment,
   WarehouseTransfer,
+  WarehouseTransferStatus,
 } from '../warehouse-types';
 
 type WorkspaceTab = 'inbound' | 'inventory' | 'outbound_transfers' | 'inbound_transfers';
@@ -51,6 +54,12 @@ export function WarehouseWorkspacePage() {
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
   const [scanCode, setScanCode] = useState('');
   const [success, setSuccess] = useState('');
+  const [transferPage, setTransferPage] = useState(1);
+  const [transferSearch, setTransferSearch] = useState('');
+  const [transferSearchDraft, setTransferSearchDraft] = useState('');
+  const [transferStatus, setTransferStatus] = useState<WarehouseTransferStatus | ''>('');
+  const transferFilters = { page: transferPage, limit: 20, search: transferSearch || undefined, status: transferStatus || undefined };
+  const changeTab = (tab: WorkspaceTab) => { setActiveTab(tab); setTransferPage(1); };
 
   // Modals state
   const [checkInModalShipment, setCheckInModalShipment] = useState<WarehouseShipment | null>(null);
@@ -112,14 +121,14 @@ export function WarehouseWorkspacePage() {
   });
 
   const outboundTransfers = useQuery({
-    queryKey: ['outbound-transfers', activeWarehouseId],
-    queryFn: () => listTransfers(activeWarehouseId, 'outbound'),
+    queryKey: ['outbound-transfers', activeWarehouseId, transferFilters],
+    queryFn: () => listTransfers(activeWarehouseId, { ...transferFilters, direction: 'outbound' }),
     enabled: Boolean(activeWarehouseId),
   });
 
   const inboundTransfers = useQuery({
-    queryKey: ['inbound-transfers', activeWarehouseId],
-    queryFn: () => listTransfers(activeWarehouseId, 'inbound'),
+    queryKey: ['inbound-transfers', activeWarehouseId, transferFilters],
+    queryFn: () => listTransfers(activeWarehouseId, { ...transferFilters, direction: 'inbound' }),
     enabled: Boolean(activeWarehouseId),
   });
 
@@ -127,14 +136,14 @@ export function WarehouseWorkspacePage() {
     queryKey: ['warehouse-transfer-context', transferSelection?.warehouseId, transferSelection?.id],
     queryFn: async (): Promise<TransferContext> => {
       if (!transferSelection) throw new Error('No transfer selected');
-      const [inventory, transfers] = await Promise.all([
+      const [inventory, pending, inTransit] = await Promise.all([
         listWarehouseShipments(transferSelection.warehouseId, { search: transferSelection.trackingCode }),
-        listTransfers(transferSelection.warehouseId, 'outbound'),
+        listTransfers(transferSelection.warehouseId, { direction: 'outbound', shipmentId: transferSelection.id, status: 'PENDING', limit: 1 }),
+        listTransfers(transferSelection.warehouseId, { direction: 'outbound', shipmentId: transferSelection.id, status: 'IN_TRANSIT', limit: 1 }),
       ]);
       return {
         shipment: inventory.items.find((item) => item.id === transferSelection.id) ?? null,
-        activeTransfer: transfers.find((item) => item.shipmentId === transferSelection.id &&
-          (item.status === 'PENDING' || item.status === 'IN_TRANSIT')),
+        activeTransfer: pending.items[0] ?? inTransit.items[0],
       };
     },
     enabled: Boolean(transferSelection),
@@ -244,6 +253,7 @@ export function WarehouseWorkspacePage() {
       setReceiveModalTransfer(null);
       setReceiveNote('');
       setReceiveWeight('');
+      setTransferPage(1);
       setActiveTab('inventory');
       setSuccess(`Đã tiếp nhận chuyến trung chuyển ${transfer.transferCode} vào kho đích.`);
       await Promise.all([
@@ -425,7 +435,7 @@ export function WarehouseWorkspacePage() {
                   id="wh-select"
                   label="Kho đang vận hành"
                   value={activeWarehouseId}
-                  onChange={(event) => setSelectedWarehouseId(event.target.value)}
+                  onChange={(event) => { setSelectedWarehouseId(event.target.value); setTransferPage(1); }}
                 >
                   {allWarehouses.data?.items?.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
@@ -546,7 +556,7 @@ export function WarehouseWorkspacePage() {
             aria-selected={activeTab === 'inbound'}
             className={getTabClassName('inbound')}
             id="warehouse-tab-inbound"
-            onClick={() => setActiveTab('inbound')}
+            onClick={() => changeTab('inbound')}
             role="tab"
             type="button"
           >
@@ -557,7 +567,7 @@ export function WarehouseWorkspacePage() {
             aria-selected={activeTab === 'inventory'}
             className={getTabClassName('inventory')}
             id="warehouse-tab-inventory"
-            onClick={() => setActiveTab('inventory')}
+            onClick={() => changeTab('inventory')}
             role="tab"
             type="button"
           >
@@ -568,27 +578,43 @@ export function WarehouseWorkspacePage() {
             aria-selected={activeTab === 'outbound_transfers'}
             className={getTabClassName('outbound_transfers')}
             id="warehouse-tab-outbound-transfers"
-            onClick={() => setActiveTab('outbound_transfers')}
+            onClick={() => changeTab('outbound_transfers')}
             role="tab"
             type="button"
           >
-            Chuyển đi ({outboundTransfers.data?.length ?? 0})
+            Chuyển đi ({outboundTransfers.data?.total ?? 0})
           </button>
           <button
             aria-controls="warehouse-panel-inbound-transfers"
             aria-selected={activeTab === 'inbound_transfers'}
             className={getTabClassName('inbound_transfers')}
             id="warehouse-tab-inbound-transfers"
-            onClick={() => setActiveTab('inbound_transfers')}
+            onClick={() => changeTab('inbound_transfers')}
             role="tab"
             type="button"
           >
-            Chuyển đến (
-            {inboundTransfers.data?.filter((transfer) => transfer.status === 'IN_TRANSIT').length ??
-              0}
-            )
+            Chuyển đến ({inboundTransfers.data?.total ?? 0})
           </button>
         </div>
+
+        {activeTab === 'outbound_transfers' || activeTab === 'inbound_transfers' ? (
+          <div className="mt-6">
+            <SearchFilter label="Tìm mã chuyển kho hoặc vận đơn" value={transferSearchDraft}
+              onChange={setTransferSearchDraft}
+              onSubmit={() => { setTransferSearch(transferSearchDraft.trim()); setTransferPage(1); }}
+              onClear={() => { setTransferSearchDraft(''); setTransferSearch(''); setTransferPage(1); }}>
+              <SelectField id="transfer-status" label="Trạng thái chuyển kho" value={transferStatus}
+                onChange={(event) => { setTransferStatus(event.target.value as WarehouseTransferStatus | ''); setTransferPage(1); }}>
+                <option value="">Tất cả trạng thái</option>
+                <option value="PENDING">Chờ xuất kho</option>
+                <option value="IN_TRANSIT">Đang trung chuyển</option>
+                <option value="COMPLETED">Đã tiếp nhận</option>
+                <option value="CANCELLED">Đã hủy</option>
+              </SelectField>
+              <Button type="submit">Tìm kiếm</Button>
+            </SearchFilter>
+          </div>
+        ) : null}
 
         {/* TAB 1: INBOUND PICKUPS */}
         {activeTab === 'inbound' ? (
@@ -769,11 +795,7 @@ export function WarehouseWorkspacePage() {
                   header: 'Thao tác',
                   align: 'right',
                   render: (shipment) => {
-                    const activeShipmentTransfer = outboundTransfers.data?.find(
-                      (transfer) =>
-                        transfer.shipmentId === shipment.id &&
-                        (transfer.status === 'PENDING' || transfer.status === 'IN_TRANSIT'),
-                    );
+                    const activeShipmentTransfer = shipment.activeTransfer;
                     return (
                       <div className="flex w-full flex-col gap-2 xl:flex-row xl:justify-end">
                         {shipment.status === 'AT_ORIGIN_WAREHOUSE' && !activeShipmentTransfer ? (
@@ -962,8 +984,10 @@ export function WarehouseWorkspacePage() {
               loading={outboundTransfers.isPending}
               loadingLabel="Đang tải danh sách chuyến xuất"
               onRetry={() => void outboundTransfers.refetch()}
-              rows={outboundTransfers.data ?? []}
+              rows={outboundTransfers.data?.items ?? []}
             />
+            {outboundTransfers.data ? <Pagination page={transferPage} totalPages={outboundTransfers.data.totalPages}
+              disabled={outboundTransfers.isFetching} onPageChange={setTransferPage} label="Phân trang chuyển đi" /> : null}
           </section>
         ) : null}
 
@@ -1071,8 +1095,10 @@ export function WarehouseWorkspacePage() {
               loading={inboundTransfers.isPending}
               loadingLabel="Đang tải danh sách chuyến đến"
               onRetry={() => void inboundTransfers.refetch()}
-              rows={inboundTransfers.data ?? []}
+              rows={inboundTransfers.data?.items ?? []}
             />
+            {inboundTransfers.data ? <Pagination page={transferPage} totalPages={inboundTransfers.data.totalPages}
+              disabled={inboundTransfers.isFetching} onPageChange={setTransferPage} label="Phân trang chuyển đến" /> : null}
           </section>
         ) : null}
 

@@ -105,8 +105,25 @@ export interface WarehouseTransfer {
   } | null;
 }
 
+export interface TransferPage {
+  items: WarehouseTransfer[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface TransferFilters {
+  direction?: 'inbound' | 'outbound' | 'all';
+  status?: WarehouseTransferStatus;
+  search?: string;
+  shipmentId?: string;
+  page?: number;
+  limit?: number;
+}
+
 export interface InboundQueue {
-  incomingTransfers: WarehouseTransfer[];
+  incomingTransfers: TransferPage;
   pickedUpShipments: WarehouseShipment[];
 }
 
@@ -128,6 +145,7 @@ export interface WarehousePackageSnapshot extends PackageSnapshot {
 }
 
 export interface WarehouseShipment {
+  activeTransfer?: Pick<WarehouseTransfer, 'id' | 'transferCode' | 'status'> | null;
   id: string;
   trackingCode: string;
   status: ShipmentStatus;

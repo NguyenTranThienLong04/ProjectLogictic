@@ -1,5 +1,11 @@
 import { defineConfig } from '@playwright/test';
 import { resolve } from 'node:path';
+import { assertDisposablePostgresDatabase } from '../disposable-database.js';
+import { loadRootEnvironment } from './support/environment.js';
+
+// Refuse non-disposable targets before starting servers or any browser fixture writes.
+loadRootEnvironment();
+assertDisposablePostgresDatabase(process.env);
 
 const repositoryRoot = resolve(import.meta.dirname, '../../..');
 

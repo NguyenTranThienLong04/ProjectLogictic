@@ -53,7 +53,7 @@ try {
         data = notifications.find((n) => path.includes(n.id)); data.readAt = now; reads.push(data.id);
       } else if (path.endsWith('/staff/me')) data = { warehouseId: origin.id, warehouse: origin, user: { fullName: 'Test Staff' } };
       else if (path.endsWith('/warehouses')) data = { items: [origin, destA, destB], pagination: { totalPages: 1 } };
-      else if (path.endsWith('/inbound-queue')) data = { pickedUpShipments: shipment.status === 'PICKED_UP' ? [shipment] : [], incomingTransfers: [] };
+      else if (path.endsWith('/inbound-queue')) data = { pickedUpShipments: shipment.status === 'PICKED_UP' ? [shipment] : [], incomingTransfers: { items: [], total: 0, page: 1, limit: 20, totalPages: 0 } };
       else if (path.endsWith('/shipments')) {
         if (lookupError && url.searchParams.has('search')) return route.fulfill({ status: 503, json: { message: 'Lỗi tải dữ liệu' } });
         data = { items: shipment.currentWarehouseId === origin.id ? [shipment] : [], pagination: { totalPages: 1 } };
@@ -69,7 +69,12 @@ try {
         if (body.toWarehouseId !== shipment.destinationWarehouseId) return route.fulfill({ status: 409, json: { code: 'TRANSFER_DESTINATION_MISMATCH', message: 'Transfer destination must match the shipment sorting destination' } });
         data = { id: uuid(30), transferCode: 'TRF-TEST', ...body, status: 'PENDING', shipment, fromWarehouse: origin, toWarehouse: shipment.destinationWarehouse, createdAt: now };
         activeTransfers = [data];
-      } else if (path.endsWith('/transfers')) data = url.searchParams.get('direction') === 'outbound' ? activeTransfers : [];
+      } else if (path.endsWith('/transfers')) {
+        const items = url.searchParams.get('direction') === 'outbound' ? activeTransfers.filter((item) =>
+          (!url.searchParams.has('status') || item.status === url.searchParams.get('status')) &&
+          (!url.searchParams.has('shipmentId') || item.shipmentId === url.searchParams.get('shipmentId'))) : [];
+        data = { items, total: items.length, page: 1, limit: 20, totalPages: items.length ? 1 : 0 };
+      }
       else if (path.endsWith('/check-in') && req.method() === 'POST') {
         checkIns.push(req.postDataJSON()); shipment.status = 'AT_ORIGIN_WAREHOUSE'; shipment.currentWarehouseId = origin.id; data = { shipment, idempotent: false };
       } else if (path.includes('/assignments/') || path.includes('/delivery-assignments/')) {

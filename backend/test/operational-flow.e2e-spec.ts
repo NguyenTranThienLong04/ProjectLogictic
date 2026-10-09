@@ -783,8 +783,8 @@ describe.each([
       .set('Authorization', `Bearer ${token('destinationStaff')}`)
       .expect(200);
     expect(
-      bodyFrom<{ incomingTransfers: Array<{ id: string }> }>(inboundResponse).data
-        .incomingTransfers,
+      bodyFrom<{ incomingTransfers: { items: Array<{ id: string }> } }>(inboundResponse).data
+        .incomingTransfers.items,
     ).toEqual(expect.arrayContaining([expect.objectContaining({ id: transferId })]));
     await request(server)
       .post(`/api/v1/warehouses/${originWarehouseId}/transfers/${transferId}/receive`)

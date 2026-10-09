@@ -21,6 +21,10 @@ import type { AssignWarehouseStaffDto } from './dto/assign-warehouse-staff.dto.j
 import type { CreateTransferDto } from './dto/create-transfer.dto.js';
 import type { CreateWarehouseDto } from './dto/create-warehouse.dto.js';
 import type { ListWarehouseShipmentsDto } from './dto/list-warehouse-shipments.dto.js';
+import type {
+  ListIncomingTransfersDto,
+  ListWarehouseTransfersDto,
+} from './dto/list-warehouse-transfers.dto.js';
 import type { ListWarehouseExceptionsDto } from './dto/list-warehouse-exceptions.dto.js';
 import type { ListWarehousesDto } from './dto/list-warehouses.dto.js';
 import type { ReceiveTransferDto } from './dto/receive-transfer.dto.js';
@@ -1191,10 +1195,11 @@ export class WarehousesService {
 
   async listTransfers(
     warehouseId: string,
-    direction: 'inbound' | 'outbound' | 'all' = 'all',
+    query: ListWarehouseTransfersDto,
     actor: AuthenticatedUser,
-  ): Promise<WarehouseTransferResponse[]> {
+  ) {
     await this.assertStaffWarehouseScope(actor, warehouseId);
+    const { direction } = query;
     const where: Prisma.WarehouseTransferWhereInput =
       direction === 'inbound'
         ? { toWarehouseId: warehouseId }
@@ -1202,15 +1207,55 @@ export class WarehousesService {
           ? { fromWarehouseId: warehouseId }
           : { OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }] };
 
-    const transfers = await this.prisma.warehouseTransfer.findMany({
-      where,
-      include: warehouseTransferResponseInclude,
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
+    return this.paginateTransfers(
+      { AND: [where, { status: query.status, shipmentId: query.shipmentId }] },
+      query,
+      [{ createdAt: 'desc' }, { id: 'desc' }],
+    );
+  }
 
-    return transfers.map((transfer) =>
-      toWarehouseTransferResponse(transfer, this.transferFlowPolicy),
+  private async paginateTransfers(
+    scope: Prisma.WarehouseTransferWhereInput,
+    query: ListIncomingTransfersDto,
+    orderBy: Prisma.WarehouseTransferOrderByWithRelationInput[],
+  ) {
+    const { page, limit, search } = query;
+    const where: Prisma.WarehouseTransferWhereInput = {
+      AND: [
+        scope,
+        search
+          ? {
+              OR: [
+                { transferCode: { contains: search, mode: 'insensitive' } },
+                { shipment: { trackingCode: { contains: search, mode: 'insensitive' } } },
+              ],
+            }
+          : {},
+      ],
+    };
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const [transfers, total] = await Promise.all([
+          transaction.warehouseTransfer.findMany({
+            where,
+            include: warehouseTransferResponseInclude,
+            orderBy,
+            skip: (page - 1) * limit,
+            take: limit,
+          }),
+          transaction.warehouseTransfer.count({ where }),
+        ]);
+        return {
+          items: transfers.map((transfer) =>
+            toWarehouseTransferResponse(transfer, this.transferFlowPolicy),
+          ),
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
   }
 
@@ -1218,17 +1263,21 @@ export class WarehousesService {
   // INBOUND QUEUE (PICKED UP SHIPMENTS & INBOUND TRANSFERS)
   // ==========================================
 
-  async listInboundQueue(warehouseId: string, actor: AuthenticatedUser) {
+  async listInboundQueue(
+    warehouseId: string,
+    query: ListIncomingTransfersDto,
+    actor: AuthenticatedUser,
+  ) {
     await this.assertStaffWarehouseScope(actor, warehouseId);
     const [incomingTransfers, pickedUpShipments] = await Promise.all([
-      this.prisma.warehouseTransfer.findMany({
-        where: {
+      this.paginateTransfers(
+        {
           toWarehouseId: warehouseId,
           status: WarehouseTransferStatus.IN_TRANSIT,
         },
-        include: warehouseTransferResponseInclude,
-        orderBy: { dispatchedAt: 'asc' },
-      }),
+        query,
+        [{ dispatchedAt: 'asc' }, { id: 'asc' }],
+      ),
       this.prisma.shipment.findMany({
         where: {
           status: ShipmentStatus.PICKED_UP,
@@ -1253,9 +1302,7 @@ export class WarehousesService {
     ]);
 
     return {
-      incomingTransfers: incomingTransfers.map((transfer) =>
-        toWarehouseTransferResponse(transfer, this.transferFlowPolicy),
-      ),
+      incomingTransfers,
       pickedUpShipments: pickedUpShipments.map((shipment) => this.serializeShipment(shipment)),
     };
   }
@@ -1528,6 +1575,7 @@ export class WarehousesService {
       originWarehouse: shipment.originWarehouse,
       destinationWarehouse: shipment.destinationWarehouse,
       currentWarehouse: shipment.currentWarehouse,
+      activeTransfer: shipment.transfers?.[0] ?? null,
       driverAssignments: shipment.driverAssignments?.map((assignment) => ({
         id: assignment.id,
         shipmentId: assignment.shipmentId,

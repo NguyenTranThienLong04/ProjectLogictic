@@ -66,9 +66,9 @@ try {
         pagination: { page: 1, total: 2, totalPages: 1 },
       };
     else if (path.endsWith('/inbound-queue'))
-      data = { pickedUpShipments: [], incomingTransfers: [] };
+      data = { pickedUpShipments: [], incomingTransfers: { items: [], total: 0, page: 1, limit: 20, totalPages: 0 } };
     else if (path.endsWith('/shipments')) data = { items: [], pagination: { total: 0 } };
-    else if (path.endsWith('/transfers')) data = [];
+    else if (path.endsWith('/transfers')) data = { items: [], total: 0, page: 1, limit: 20, totalPages: 0 };
     else if (path.includes('/notifications'))
       data = { items: [], unreadCount: 0, pagination: { total: 0 } };
     else throw new Error(`Unexpected API: ${path}`);
