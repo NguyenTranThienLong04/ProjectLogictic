@@ -12,6 +12,7 @@ import { dateTimeFormatter } from '../../utils/format';
 import { AccountLayout } from '../auth/components/account-layout';
 import { useAuth } from '../auth/auth-context';
 import { useOpenNotification } from './use-open-notification';
+import { notificationTarget } from './notification-target';
 import {
   listNotifications,
   markAllNotificationsRead,
@@ -153,7 +154,7 @@ export function NotificationsPage() {
                       </time>
                     </div>
                     <h2 className="mt-3 text-base font-semibold text-ink sm:text-lg">
-                      {user?.role === 'DRIVER' ? (
+                      {notificationTarget(item, user?.role) ? (
                         <button
                           className="focus-ring min-h-12 cursor-pointer rounded-control text-left text-primary hover:underline disabled:opacity-45"
                           onClick={() => openNotification.mutate(item)}

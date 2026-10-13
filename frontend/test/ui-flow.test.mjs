@@ -8,7 +8,7 @@ const assignmentId = '10000000-0000-4000-8000-000000000021';
 test('notification routes use assignment ID, task type and Driver role', () => {
   for (const [type, route] of [['PICKUP_ASSIGNMENT_CREATED', '/driver/pickups/'], ['DELIVERY_ASSIGNMENT_CREATED', '/driver/deliveries/']]) {
     assert.equal(notificationTarget({ type, data: { shipmentId: 'shipment', assignmentId } }, 'DRIVER'), route + assignmentId);
-    assert.equal(notificationTarget({ type, data: { assignmentId } }, 'CUSTOMER'), undefined);
+    assert.equal(notificationTarget({ type, data: { assignmentId } }, 'CUSTOMER'), '/shipments');
   }
 });
 test('missing or malformed entity falls back without using shipment IDs or arbitrary URLs', () => {

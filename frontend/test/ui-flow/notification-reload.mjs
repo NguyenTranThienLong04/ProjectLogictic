@@ -3,8 +3,9 @@ import { mkdir } from 'node:fs/promises';
 import { chromium, expect } from '@playwright/test';
 import { build, preview } from 'vite';
 import { fileURLToPath } from 'node:url';
+import { checkCustomerNotifications, checkOtherNotificationRoles } from './customer-notification-check.mjs';
 
-// Actual App, BrowserRouter, AuthProvider and lazy Driver routes; HTTP is mocked.
+// Actual App, BrowserRouter, AuthProvider and lazy role routes; HTTP is mocked.
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const config = {
   root, configFile: `${root}/vite.config.ts`, logLevel: 'error',
@@ -22,6 +23,8 @@ let browser;
 try {
   await mkdir('test-results/notification-linehaul', { recursive: true });
   browser = await chromium.launch();
+  await checkCustomerNotifications(browser, origin);
+  await checkOtherNotificationRoles(browser, origin);
   for (const width of [375, 768, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: 1000 } });
     const page = await context.newPage();
