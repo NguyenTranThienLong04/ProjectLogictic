@@ -1,0 +1,321 @@
+{
+  "capturedAt": "2026-10-15T20:27:14.841Z",
+  "source": "Live LocationIQ; public address test cases; credentials removed",
+  "cases": [
+    {
+      "input": {
+        "street": "475A Điện Biên Phủ",
+        "ward": "Thanh Mỹ Tây",
+        "city": "Hồ Chí Minh"
+      },
+      "attempts": [
+        {
+          "endpoint": "https://us1.locationiq.com/v1/search/structured",
+          "parameters": {
+            "format": "json",
+            "countrycodes": "vn",
+            "limit": "5",
+            "addressdetails": "1",
+            "normalizeaddress": "1",
+            "accept-language": "vi",
+            "viewbox": "106.667099,10.749000,106.768901,10.849000",
+            "bounded": "1",
+            "street": "475A Điện Biên Phủ",
+            "state": "Hồ Chí Minh",
+            "country": "Vietnam"
+          },
+          "status": 200,
+          "raw": [
+            {
+              "place_id": "257024048",
+              "licence": "https://locationiq.com/attribution",
+              "osm_type": "way",
+              "osm_id": "408153725",
+              "lat": "10.7881993",
+              "lon": "106.6953823",
+              "class": "highway",
+              "type": "primary",
+              "importance": 0.05340036697947658,
+              "display_name": "Điện Biên Phủ, Khu phố 20, Phường Tân Định, Thành phố Thủ Đức, 72200, Việt Nam",
+              "address": {
+                "road": "Điện Biên Phủ",
+                "neighbourhood": "Khu phố 20",
+                "suburb": "Phường Tân Định",
+                "city": "Thành phố Thủ Đức",
+                "postcode": "72200",
+                "country": "Việt Nam",
+                "country_code": "vn"
+              },
+              "boundingbox": [
+                "10.7865155",
+                "10.7898831",
+                "106.6937362",
+                "106.6970284"
+              ]
+            },
+            {
+              "place_id": "257041733",
+              "licence": "https://locationiq.com/attribution",
+              "osm_type": "way",
+              "osm_id": "1344043029",
+              "lat": "10.7958815",
+              "lon": "106.7031342",
+              "class": "highway",
+              "type": "primary",
+              "importance": 0.05340036697947658,
+              "display_name": "Điện Biên Phủ, Khu phố 58, Phường Gia Định, Thành phố Thủ Đức, 72200, Việt Nam",
+              "address": {
+                "road": "Điện Biên Phủ",
+                "neighbourhood": "Khu phố 58",
+                "suburb": "Phường Gia Định",
+                "city": "Thành phố Thủ Đức",
+                "postcode": "72200",
+                "country": "Việt Nam",
+                "country_code": "vn"
+              },
+              "boundingbox": [
+                "10.7945588",
+                "10.7971927",
+                "106.7019075",
+                "106.7043736"
+              ]
+            },
+            {
+              "place_id": "257093942",
+              "licence": "https://locationiq.com/attribution",
+              "osm_type": "way",
+              "osm_id": "192512371",
+              "lat": "10.8008850",
+              "lon": "106.7143705",
+              "class": "highway",
+              "type": "primary",
+              "importance": 0.05340036697947658,
+              "display_name": "Điện Biên Phủ, Khu phố 22, Phường Thạnh Mỹ Tây, Thành phố Thủ Đức, 72308, Việt Nam",
+              "address": {
+                "road": "Điện Biên Phủ",
+                "neighbourhood": "Khu phố 22",
+                "suburb": "Phường Thạnh Mỹ Tây",
+                "city": "Thành phố Thủ Đức",
+                "postcode": "72308",
+                "country": "Việt Nam",
+                "country_code": "vn"
+              },
+              "boundingbox": [
+                "10.8004610",
+                "10.8012607",
+                "106.7127424",
+                "106.7159791"
+              ]
+            },
+            {
+              "place_id": "257074220",
+              "licence": "https://locationiq.com/attribution",
+              "osm_type": "way",
+              "osm_id": "35085959",
+              "lat": "10.8010422",
+              "lon": "106.7147989",
+              "class": "highway",
+              "type": "trunk",
+              "importance": 0.05340036697947658,
+              "display_name": "Điện Biên Phủ, Khu phố 61, Phường Thạnh Mỹ Tây, Thành phố Thủ Đức, 72308, Việt Nam",
+              "address": {
+                "road": "Điện Biên Phủ",
+                "neighbourhood": "Khu phố 61",
+                "suburb": "Phường Thạnh Mỹ Tây",
+                "city": "Thành phố Thủ Đức",
+                "postcode": "72308",
+                "country": "Việt Nam",
+                "country_code": "vn"
+              },
+              "boundingbox": [
+                "10.8006008",
+                "10.8013975",
+                "106.7135363",
+                "106.7160340"
+              ]
+            },
+            {
+              "place_id": "256991345",
+              "licence": "https://locationiq.com/attribution",
+              "osm_type": "way",
+              "osm_id": "604140511",
+              "lat": "10.8012362",
+              "lon": "106.7094964",
+              "class": "highway",
+              "type": "primary",
+              "importance": 0.05340036697947658,
+              "display_name": "Điện Biên Phủ, Khu phố 43, Phường Gia Định, Thành phố Thủ Đức, 72308, Việt Nam",
+              "address": {
+                "road": "Điện Biên Phủ",
+                "neighbourhood": "Khu phố 43",
+                "suburb": "Phường Gia Định",
+                "city": "Thành phố Thủ Đức",
+                "postcode": "72308",
+                "country": "Việt Nam",
+                "country_code": "vn"
+              },
+              "boundingbox": [
+                "10.8010662",
+                "10.8013590",
+                "106.7092032",
+                "106.7098195"
+              ]
+            }
+          ]
+        },
+        {
+          "endpoint": "https://us1.locationiq.com/v1/search",
+          "parameters": {
+            "format": "json",
+            "countrycodes": "vn",
+            "limit": "5",
+            "addressdetails": "1",
+            "normalizeaddress": "1",
+            "accept-language": "vi",
+            "viewbox": "106.667099,10.749000,106.768901,10.849000",
+            "bounded": "1",
+            "q": "475A Điện Biên Phủ, Thạnh Mỹ Tây, Hồ Chí Minh, Việt Nam"
+          },
+          "status": 200,
+          "raw": [
+            {
+              "place_id": "257370683",
+              "licence": "https://locationiq.com/attribution",
+              "osm_type": "way",
+              "osm_id": "136505783",
+              "lat": "10.7989661",
+              "lon": "106.7218629",
+              "class": "highway",
+              "type": "primary",
+              "importance": 0.05340036697947658,
+              "display_name": "Điện Biên Phủ, Khu phố 51, Phường Thạnh Mỹ Tây, Thành phố Thủ Đức, 71108, Việt Nam",
+              "address": {
+                "road": "Điện Biên Phủ",
+                "neighbourhood": "Khu phố 51",
+                "suburb": "Phường Thạnh Mỹ Tây",
+                "city": "Thành phố Thủ Đức",
+                "postcode": "71108",
+                "country": "Việt Nam",
+                "country_code": "vn"
+              },
+              "boundingbox": [
+                "10.7984877",
+                "10.7991448",
+                "106.7201291",
+                "106.7236816"
+              ]
+            },
+            {
+              "place_id": "256996660",
+              "licence": "https://locationiq.com/attribution",
+              "osm_type": "way",
+              "osm_id": "1344043034",
+              "lat": "10.7989815",
+              "lon": "106.7188358",
+              "class": "highway",
+              "type": "trunk",
+              "importance": 0.05340036697947658,
+              "display_name": "Điện Biên Phủ, Khu phố 23, Phường Thạnh Mỹ Tây, Thành phố Thủ Đức, 71108, Việt Nam",
+              "address": {
+                "road": "Điện Biên Phủ",
+                "neighbourhood": "Khu phố 23",
+                "suburb": "Phường Thạnh Mỹ Tây",
+                "city": "Thành phố Thủ Đức",
+                "postcode": "71108",
+                "country": "Việt Nam",
+                "country_code": "vn"
+              },
+              "boundingbox": [
+                "10.7985225",
+                "10.7994523",
+                "106.7180377",
+                "106.7196407"
+              ]
+            },
+            {
+              "place_id": "257155435",
+              "licence": "https://locationiq.com/attribution",
+              "osm_type": "way",
+              "osm_id": "59986387",
+              "lat": "10.7997378",
+              "lon": "106.7171791",
+              "class": "highway",
+              "type": "primary",
+              "importance": 0.05340036697947658,
+              "display_name": "Điện Biên Phủ, Khu phố 23, Phường Thạnh Mỹ Tây, Thành phố Thủ Đức, 72308, Việt Nam",
+              "address": {
+                "road": "Điện Biên Phủ",
+                "neighbourhood": "Khu phố 23",
+                "suburb": "Phường Thạnh Mỹ Tây",
+                "city": "Thành phố Thủ Đức",
+                "postcode": "72308",
+                "country": "Việt Nam",
+                "country_code": "vn"
+              },
+              "boundingbox": [
+                "10.7993417",
+                "10.8002337",
+                "106.7164544",
+                "106.7179711"
+              ]
+            },
+            {
+              "place_id": "257009244",
+              "licence": "https://locationiq.com/attribution",
+              "osm_type": "way",
+              "osm_id": "1434431137",
+              "lat": "10.7987161",
+              "lon": "106.7197536",
+              "class": "highway",
+              "type": "trunk",
+              "importance": 0.05340036697947658,
+              "display_name": "Điện Biên Phủ, Khu phố 52, Phường Thạnh Mỹ Tây, Thành phố Thủ Đức, 71108, Việt Nam",
+              "address": {
+                "road": "Điện Biên Phủ",
+                "neighbourhood": "Khu phố 52",
+                "suburb": "Phường Thạnh Mỹ Tây",
+                "city": "Thành phố Thủ Đức",
+                "postcode": "71108",
+                "country": "Việt Nam",
+                "country_code": "vn"
+              },
+              "boundingbox": [
+                "10.7985088",
+                "10.7989351",
+                "106.7193847",
+                "106.7201291"
+              ]
+            },
+            {
+              "place_id": "257095748",
+              "licence": "https://locationiq.com/attribution",
+              "osm_type": "way",
+              "osm_id": "1420775986",
+              "lat": "10.7995526",
+              "lon": "106.7178454",
+              "class": "highway",
+              "type": "trunk",
+              "importance": 0.05340036697947658,
+              "display_name": "Điện Biên Phủ, Khu phố 23, Phường Thạnh Mỹ Tây, Thành phố Thủ Đức, 72308, Việt Nam",
+              "address": {
+                "road": "Điện Biên Phủ",
+                "neighbourhood": "Khu phố 23",
+                "suburb": "Phường Thạnh Mỹ Tây",
+                "city": "Thành phố Thủ Đức",
+                "postcode": "72308",
+                "country": "Việt Nam",
+                "country_code": "vn"
+              },
+              "boundingbox": [
+                "10.7994523",
+                "10.7996529",
+                "106.7176531",
+                "106.7180377"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -50,7 +50,7 @@ describe('LocationIQ hierarchy semantics', () => {
         province,
         ward: findWard(province.code, requested.ward)!,
       }),
-    ).toEqual({ rejection: 'hierarchy_anomaly_without_ward_match' });
+    ).toEqual({ rejection: 'street_or_house_mismatch' });
     // Even absent the hierarchy rejection, this is not house/road evidence.
     expect(
       matchesSearchStreet(normalizeLocationIqAddress(candidate.address), requested.street),
@@ -74,6 +74,9 @@ describe('LocationIQ hierarchy semantics', () => {
         road: 'Đường Nguyễn Trãi',
         ward: 'Bến Thành',
         city: 'Hồ Chí Minh',
+        precision: 'HOUSE',
+        providerLocality: 'Khu phố 3, Phường Bến Thành, Thành phố Thủ Đức',
+        administrativeMismatch: false,
       },
     });
   });
@@ -111,15 +114,18 @@ describe('LocationIQ hierarchy semantics', () => {
     'locality',
     'village',
     'hamlet',
-  ])('explicit wrong ward in %s cannot be overridden', (field) => {
-    expect(
-      evaluateAddressCandidate(
+  ])(
+    'different provider ward in %s is a warning when house/road and bounded coordinate match',
+    (field) => {
+      const evaluation = evaluateAddressCandidate(
         { ...live, address: { ...live.address, [field]: 'Phường Sài Gòn' } },
         input,
         selected,
-      ),
-    ).toEqual({ rejection: `conflicting_${field}` });
-  });
+      );
+      expect(evaluation.result?.administrativeMismatch).toBe(true);
+      expect(evaluation.result && evaluation.warnings).toContain(`provider_ward_mismatch:${field}`);
+    },
+  );
   it.each(['ward', 'suburb', 'quarter', 'neighbourhood'])(
     'recognizes an unaccented ward-equivalent in %s',
     (field) => {
@@ -132,10 +138,11 @@ describe('LocationIQ hierarchy semantics', () => {
       expect(evaluateAddressCandidate({ ...live, address }, input, selected).result).toBeDefined();
     },
   );
-  it('rejects an anomaly without affirmative ward evidence even if display_name claims the selected ward', () => {
+  it('accepts a house in the search window without demanding provider ward proof', () => {
     const address = { ...live.address, suburb: undefined };
-    expect(evaluateAddressCandidate({ ...live, address }, input, selected)).toEqual({
-      rejection: 'hierarchy_anomaly_without_ward_match',
+    expect(evaluateAddressCandidate({ ...live, address }, input, selected)).toMatchObject({
+      result: { precision: 'HOUSE' },
+      warnings: ['provider_hierarchy_anomaly:city'],
     });
   });
   it.each([

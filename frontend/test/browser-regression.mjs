@@ -10,6 +10,7 @@ const checks = [
   ['Auth warehouse scope cache', 'auth-cache/check.mjs'],
   ['Notification navigation / pending and failed mark-read', 'ui-flow/check.mjs'],
   ['Notification deep-link reload', 'ui-flow/notification-reload.mjs'],
+  ['Notification repeated clicks / read-request overlap', 'ui-flow/notification-repeat.mjs'],
   ['Warehouse + Line-haul strict / compatibility', 'ui-flow/canonical-flow.mjs'],
   ['Warehouse transfer pagination beyond 100', 'warehouse-transfer-pagination.mjs'],
 ];

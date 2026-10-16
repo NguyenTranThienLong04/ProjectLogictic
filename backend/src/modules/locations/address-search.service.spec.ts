@@ -3,7 +3,8 @@ import { jest } from '@jest/globals';
 import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { ThrottlerStorageService } from '@nestjs/throttler';
-import { AddressSearchService } from './address-search.service.js';
+import { AddressSearchService, evaluateAddressCandidate } from './address-search.service.js';
+import { findProvince, findWard } from '../../common/addresses/administrative-data.js';
 import { AddressSearchDto } from './dto/address-search.dto.js';
 import { CreateAddressDto } from '../addresses/dto/create-address.dto.js';
 import { UpdateAddressDto } from '../addresses/dto/update-address.dto.js';
@@ -42,7 +43,7 @@ describe('address search', () => {
     globalThis.fetch = originalFetch;
     storage.onApplicationShutdown();
   });
-  it('restricts VN, builds structured query, normalizes and filters invalid results', async () => {
+  it('restricts VN, builds full query, normalizes and filters invalid results', async () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify([
@@ -67,13 +68,10 @@ describe('address search', () => {
     const calledUrl = fetchMock.mock.calls[0][0];
     expect(calledUrl).toBeInstanceOf(URL);
     const url = calledUrl as URL;
-    expect(url.origin + url.pathname).toBe('https://us1.locationiq.com/v1/search/structured');
+    expect(url.origin + url.pathname).toBe('https://us1.locationiq.com/v1/search');
     expect(url.searchParams.get('countrycodes')).toBe('vn');
     expect(url.searchParams.get('limit')).toBe('5');
-    expect(url.searchParams.has('q')).toBe(false);
-    expect(url.searchParams.get('street')).toBe(input.street);
-    expect(url.searchParams.get('state')).toBe(input.city);
-    expect(url.searchParams.get('country')).toBe('Vietnam');
+    expect(url.searchParams.get('q')).toBe('123 Nguyễn Trãi, Bến Thành, Hồ Chí Minh, Việt Nam');
     expect(url.searchParams.get('normalizeaddress')).toBe('1');
     expect(url.searchParams.get('viewbox')).toBe('106.644103,10.720000,106.745897,10.820000');
     expect(url.searchParams.get('bounded')).toBe('1');
@@ -103,11 +101,6 @@ describe('address search', () => {
     ['wrong province', { state: 'Hà Nội' }],
     ['wrong explicit province', { province: 'Hà Nội' }],
     ['wrong region', { region: 'Hà Nội' }],
-    ['wrong ward', { suburb: 'Phường Sài Gòn' }],
-    ['same street in another area', { suburb: 'Linh Chiểu', city: 'Thủ Đức' }],
-    ['conflicting locality', { locality: 'Thủ Đức' }],
-    ['conflicting explicit ward in neighbourhood', { neighbourhood: 'Phường Sài Gòn' }],
-    ['conflicting explicit ward in hamlet', { hamlet: 'Phường Sài Gòn' }],
     ['wrong country', { country_code: 'us' }],
     ['conflicting country', { country: 'Singapore' }],
   ])('returns no match for %s even when street matches', async (_label, address) => {
@@ -182,9 +175,11 @@ describe('address search', () => {
       ward: 'Phường Bến Thành',
       district: 'Thành phố Thủ Đức',
     });
-    expect((fetchMock.mock.calls[0][0] as URL).searchParams.get('state')).toBe('Hồ Chí Minh');
-    expect((fetchMock.mock.calls[1][0] as URL).searchParams.get('q')).toBe(
+    expect((fetchMock.mock.calls[0][0] as URL).searchParams.get('q')).toBe(
       '123 Nguyễn Trãi, Bến Thành, Hồ Chí Minh, Việt Nam',
+    );
+    expect((fetchMock.mock.calls[1][0] as URL).searchParams.get('q')).toBe(
+      '123 Nguyễn Trãi, Hồ Chí Minh, Việt Nam',
     );
   });
   it('accepts Thu Duc only when it is the selected canonical ward (no place-name blacklist)', async () => {
@@ -215,7 +210,6 @@ describe('address search', () => {
   it.each([
     { ...input, city: 'Unknown' },
     { ...input, city: 'Hà Nội' },
-    { ...input, ward: '' },
     { ...input, ward: 'Unknown' },
   ])('rejects noncanonical selections before contacting provider', async (selection) => {
     await expect(service.search(selection)).rejects.toMatchObject({ status: 400 });
@@ -248,7 +242,8 @@ describe('address search', () => {
     expect(await service.search(input)).toEqual([]);
   });
   it('enforces the account-wide per-second limit before fetching', async () => {
-    fetchMock.mockImplementation(() => Promise.resolve(new Response('[]')));
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify([valid]))));
+    await service.search(input);
     await service.search(input);
     await expect(service.search(input)).rejects.toMatchObject({ status: 429 });
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -290,7 +285,7 @@ describe('address search', () => {
         ),
       );
       expect(await service.search(input)).toEqual([]);
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     },
   );
   it.each([
@@ -303,7 +298,7 @@ describe('address search', () => {
     expect(await service.search(input)).toEqual([]);
   });
   it.each([200, 404])(
-    'falls back once after structured no match (%s) with identical restrictions',
+    'drops the ward after full query no match (%s) with identical restrictions',
     async (status) => {
       fetchMock.mockResolvedValueOnce(new Response(status === 200 ? '[]' : '', { status }));
       fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([valid])));
@@ -314,9 +309,7 @@ describe('address search', () => {
       const primary = fetchMock.mock.calls[0][0] as URL;
       const fallback = fetchMock.mock.calls[1][0] as URL;
       expect(fallback.pathname).toBe('/v1/search');
-      expect(fallback.searchParams.get('q')).toBe(
-        '123 Nguyễn Trãi, Bến Thành, Hồ Chí Minh, Việt Nam',
-      );
+      expect(fallback.searchParams.get('q')).toBe('123 Nguyễn Trãi, Hồ Chí Minh, Việt Nam');
       expect(fallback.searchParams.has('street')).toBe(false);
       for (const name of [
         'viewbox',
@@ -382,7 +375,7 @@ describe('address search', () => {
       });
     },
   );
-  it.each(['lat', 'lon'])('filters malformed %s before normalization', async (field) => {
+  it.each(['lat', 'lon'])('filters malformed %s before normalization', (field) => {
     for (const value of [
       'NaN',
       'Infinity',
@@ -397,18 +390,13 @@ describe('address search', () => {
       field === 'lat' ? '90.0000001' : '180.0000001',
       field === 'lat' ? '-90.0000001' : '-180.0000001',
     ]) {
-      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([{ ...valid, [field]: value }])));
-      // A fresh limiter keeps this parser test independent of account quotas.
-      const parser = new AddressSearchService(new ConfigService({ LOCATIONIQ_API_KEY: 'test' }), {
-        increment: () =>
-          Promise.resolve({
-            totalHits: 1,
-            timeToExpire: 1,
-            isBlocked: false,
-            timeToBlockExpire: 0,
-          }),
-      });
-      await expect(parser.search(input)).resolves.toEqual([]);
+      const province = findProvince(input.city)!;
+      expect(
+        evaluateAddressCandidate({ ...valid, [field]: value }, input, {
+          province,
+          ward: findWard(province.code, input.ward)!,
+        }),
+      ).toEqual({ rejection: 'invalid_coordinate' });
     }
   });
   it.each([
@@ -418,8 +406,9 @@ describe('address search', () => {
     { street: '123', city: '' },
     { ...input, url: 'https://evil.test' },
     { ...input, street: 'x'.repeat(256) },
-    { ...input, ward: undefined },
-    { ...input, ward: ' ' },
+    { ...input, ward: 123 },
+    { ...input, ward: 0 },
+    { ...input, ward: false },
   ])('rejects invalid DTO with 400', async (body) => {
     await expect(
       pipe.transform(body, { type: 'body', metatype: AddressSearchDto }),
@@ -433,4 +422,12 @@ describe('address search', () => {
       ),
     ).toEqual(input);
   });
+  it.each(['', ' ', null])(
+    'normalizes an omitted ward without bypassing type validation',
+    async (ward) => {
+      await expect(
+        pipe.transform({ ...input, ward }, { type: 'body', metatype: AddressSearchDto }),
+      ).resolves.toMatchObject({ ward: undefined });
+    },
+  );
 });

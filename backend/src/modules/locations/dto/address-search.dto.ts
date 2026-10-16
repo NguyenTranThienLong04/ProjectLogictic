@@ -10,10 +10,14 @@ export class AddressSearchDto {
   @Length(3, 255)
   street!: string;
 
-  @Transform(trim)
+  @Transform(({ value }: { value: unknown }) => {
+    const normalized = trim({ value });
+    return normalized === '' || normalized === null ? undefined : normalized;
+  })
+  @IsOptional()
   @IsString()
   @Length(1, 100)
-  ward!: string;
+  ward?: string;
 
   @Transform(trim)
   @IsOptional()

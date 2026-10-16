@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ThrottlerStorage } from '@nestjs/throttler';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { AddressSearchDto } from './dto/address-search.dto.js';
 import { findProvince, findWard } from '../../common/addresses/administrative-data.js';
 import {
@@ -14,6 +15,7 @@ import {
   assessAdministration,
   isInAddressSearchArea,
   matchesSearchStreet,
+  splitSearchStreet,
   type SelectedAdministration,
 } from './address-search-policy.js';
 import { normalizeLocationIqAddress } from './locationiq-address-normalization.js';
@@ -27,6 +29,9 @@ export interface AddressSearchResult {
   road?: string;
   ward?: string;
   city?: string;
+  precision: 'HOUSE' | 'STREET';
+  providerLocality?: string;
+  administrativeMismatch: boolean;
 }
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
@@ -71,19 +76,45 @@ export function evaluateAddressCandidate(
   const normalized = normalizeLocationIqAddress(address);
   const { rejection, warnings } = assessAdministration(normalized, selected);
   if (rejection) return { rejection };
-  if (!matchesSearchStreet(normalized, input.street))
+  // Only actual road features may stand in for an unknown house. A locality,
+  // POI with no house number, or an explicitly different house is not a match.
+  const streetFeature = row?.class === 'highway' || row?.category === 'highway';
+  if (!matchesSearchStreet(normalized, input.street, streetFeature))
     return { rejection: 'street_or_house_mismatch' };
+  const precision = normalized.houseNumber ? 'HOUSE' : 'STREET';
+  const administrativeMismatch = warnings.some((warning) =>
+    warning.startsWith('provider_ward_mismatch:'),
+  );
+  const providerLocality = [
+    ...new Set(
+      [...normalized.localLevels, ...normalized.wardLevels, ...normalized.intermediateLevels].map(
+        ({ name }) => name,
+      ),
+    ),
+  ].join(', ');
   return {
     warnings,
     result: {
       id,
-      displayName: [input.street.trim(), selected.ward.fullName, selected.province.name].join(', '),
+      // Never label a road centroid as the requested house number.
+      displayName: [
+        precision === 'HOUSE'
+          ? [normalized.houseNumber, splitSearchStreet(input.street).road].join(' ')
+          : normalized.road,
+        !administrativeMismatch ? selected.ward?.fullName : undefined,
+        selected.province.name,
+      ]
+        .filter(Boolean)
+        .join(', '),
       latitude,
       longitude,
       houseNumber: normalized.houseNumber,
       road: normalized.road,
-      ward: selected.ward.name,
+      ward: selected.ward?.name,
       city: selected.province.name,
+      precision,
+      providerLocality: providerLocality || undefined,
+      administrativeMismatch,
     },
   };
 }
@@ -95,10 +126,10 @@ export class AddressSearchService {
     @Inject(ThrottlerStorage) private readonly limiter: ThrottlerStorage,
   ) {}
 
-  async search(input: AddressSearchDto): Promise<AddressSearchResult[]> {
+  async search(input: AddressSearchDto, signal?: AbortSignal): Promise<AddressSearchResult[]> {
     const province = findProvince(input.city);
     const ward = findWard(province?.code, input.ward);
-    if (!province || !ward)
+    if (!province || (input.ward && !ward))
       throw new BadRequestException('Select a valid canonical province and ward');
     const selected = { province, ward };
     const key = this.config.get<string>('LOCATIONIQ_API_KEY');
@@ -114,37 +145,63 @@ export class AddressSearchService {
       viewbox: addressSearchViewbox(selected),
       bounded: '1',
     };
-    const structured = new URL('https://us1.locationiq.com/v1/search/structured');
-    structured.search = new URLSearchParams({
-      ...common,
-      street: input.street,
-      // Canonical provinces include centrally governed cities: state is the
-      // administrative level shared by every province; never send the ward as city.
-      state: province.name,
-      country: 'Vietnam',
-    }).toString();
-    const selectable = (body: unknown[]) =>
-      body
+    const street = input.street.normalize('NFC').trim().replace(/\s+/g, ' ');
+    const { road } = splitSearchStreet(street);
+    const queries = [
+      ...new Set(
+        [[street, ward?.name], [street], [road, ward?.name], [road]].map((parts) =>
+          [...parts, province.name, 'Việt Nam'].filter(Boolean).join(', '),
+        ),
+      ),
+    ];
+    const requestStarts: number[] = [];
+    for (const q of queries) {
+      signal?.throwIfAborted();
+      // Do not let a fast four-attempt lookup exhaust its own two/sec allowance.
+      // Concurrent clients still share the authoritative account limiter below.
+      if (requestStarts.length >= 2) {
+        const previousPair = requestStarts[requestStarts.length - 2];
+        await delay(Math.max(0, 1100 - (Date.now() - previousPair)), undefined, { signal });
+      }
+      requestStarts.push(Date.now());
+      const url = new URL('https://us1.locationiq.com/v1/search');
+      url.search = new URLSearchParams({ ...common, q }).toString();
+      const results = (await this.request(url, signal))
         .flatMap((item) => {
           const evaluation = evaluateAddressCandidate(item, input, selected);
           return evaluation.result ? [evaluation.result] : [];
         })
-        .slice(0, 5);
-    const results = selectable(await this.request(structured));
-    // No usable structured result (empty/404 or all rejected): one free-form
-    // attempt in exactly the SAME area, subject to exactly the same validation.
-    if (results.length === 0) {
-      const fallback = new URL('https://us1.locationiq.com/v1/search');
-      fallback.search = new URLSearchParams({
-        ...common,
-        q: [input.street, ward.name, province.name, 'Việt Nam'].join(', '),
-      }).toString();
-      return selectable(await this.request(fallback));
+        .sort(
+          (a, b) =>
+            Number(b.precision === 'HOUSE') - Number(a.precision === 'HOUSE') ||
+            Number(a.administrativeMismatch) - Number(b.administrativeMismatch),
+        );
+      const seenCoordinates = new Set<string>();
+      const seenAddresses = new Set<string>();
+      const unique = results.filter((result) => {
+        const coordinates = `${result.latitude},${result.longitude}`;
+        // Preserve distinct road segments; they can share a label but have
+        // different coordinates. House duplicates also need the same locality.
+        const address = `${result.displayName}|${result.providerLocality ?? ''}`
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+        if (
+          seenCoordinates.has(coordinates) ||
+          (result.precision === 'HOUSE' && seenAddresses.has(address))
+        )
+          return false;
+        seenCoordinates.add(coordinates);
+        if (result.precision === 'HOUSE') seenAddresses.add(address);
+        return true;
+      });
+      if (unique.length) return unique.slice(0, 5);
     }
-    return results;
+    return [];
   }
 
-  private async request(url: URL): Promise<unknown[]> {
+  private async request(url: URL, signal?: AbortSignal): Promise<unknown[]> {
+    signal?.throwIfAborted();
     // Account-wide limits in addition to the controller's per-client throttle.
     // Charge EACH upstream request, including the fallback.
     // The existing Redis storage supplies its single-instance fallback on outages.
@@ -172,7 +229,10 @@ export class AddressSearchService {
     let response: Response;
     let body: unknown;
     try {
-      response = await fetch(url, { signal: AbortSignal.timeout(5000), redirect: 'error' });
+      response = await fetch(url, {
+        signal: AbortSignal.any([AbortSignal.timeout(5000), ...(signal ? [signal] : [])]),
+        redirect: 'error',
+      });
       if (response.status === 404) return [];
       if (response.status === 429)
         throw new HttpException(

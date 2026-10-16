@@ -208,11 +208,14 @@ describe('address search HTTP boundary (session repository/provider mocked)', ()
       latitude: result.latitude,
       longitude: result.longitude,
     });
-    expect(search).toHaveBeenLastCalledWith({
-      street: '123 Nguyễn Trãi',
-      city: 'Hồ Chí Minh',
-      ward: 'Bến Thành',
-    });
+    expect(search).toHaveBeenLastCalledWith(
+      {
+        street: '123 Nguyễn Trãi',
+        city: 'Hồ Chí Minh',
+        ward: 'Bến Thành',
+      },
+      expect.any(AbortSignal),
+    );
     for (let i = 0; i < 6; i++)
       await request(http)
         .post(path)

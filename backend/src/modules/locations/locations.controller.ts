@@ -7,7 +7,9 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { UserRole } from '../../generated/prisma/client.js';
@@ -39,8 +41,17 @@ export class LocationsController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Search Vietnamese addresses for explicit map selection' })
-  searchAddress(@Body() dto: AddressSearchDto) {
-    return this.addressSearch.search(dto);
+  async searchAddress(@Body() dto: AddressSearchDto, @Req() request: Request) {
+    const controller = new AbortController();
+    const cancel = () => {
+      if (!request.res?.writableEnded) controller.abort();
+    };
+    request.res?.once('close', cancel);
+    try {
+      return await this.addressSearch.search(dto, controller.signal);
+    } finally {
+      request.res?.off('close', cancel);
+    }
   }
 
   @Post('driver/location')

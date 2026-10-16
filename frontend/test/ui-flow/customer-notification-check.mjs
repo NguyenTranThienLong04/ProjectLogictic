@@ -54,7 +54,13 @@ export async function checkCustomerNotifications(browser, origin) {
     const open = async (entry) => {
       await page.goto(origin + (entry === 'dropdown' ? '/shipments' : '/notifications'));
       if (entry === 'dropdown') await page.locator('summary').filter({ hasText: 'Thông báo' }).click();
-      await page.getByRole('button', { name: new RegExp(`^${notification.title}`) }).click({ timeout: 2500 });
+      try {
+        await page.getByRole('button', { name: new RegExp(`^${notification.title}`) }).click({ timeout: 2500 });
+      } catch (error) {
+        await page.screenshot({ path: `test-results/notification-linehaul/customer-open-failure-${width}-${entry}.png` });
+        console.error(JSON.stringify({ entry, width, readMode, type: notification.type, url: page.url(), errors, unexpected }));
+        throw error;
+      }
     };
     try {
       for (const entry of ['dropdown', 'center']) {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 import { build, preview } from 'vite';
 import { fileURLToPath } from 'node:url';
+import { mkdir } from 'node:fs/promises';
 const validatedSearch = process.argv.includes('--validated-search');
 const currentLocation = process.argv.includes('--current-location');
 const directSearch = validatedSearch || process.argv.includes('--direct-search');
@@ -79,24 +80,26 @@ try {
     if (path.endsWith('/locations/address-search')) {
       searches++;
       const body = request.postDataJSON();
-      assert(body.street && body.city && body.ward);
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      if (searchResponse === 'error') { await route.fulfill({ status: 503, json: { message: 'Unavailable' } }); return; }
-      data = searchResponse === 'empty' ? [] : [searchResult, { ...searchResult, id: 'vn-2', displayName: 'Kết quả thứ hai' }];
+      const responseMode = searchResponse;
+      assert(body.street && body.city);
+      await new Promise((resolve) => setTimeout(resolve, responseMode === 'slow' ? 1200 : 200));
+      if (responseMode === 'error' || responseMode === 'rate-limited') { await route.fulfill({ status: responseMode === 'error' ? 503 : 429, json: { message: 'Unavailable' } }); return; }
+      data = responseMode === 'empty' ? [] : [searchResult, { ...searchResult, id: 'vn-2', displayName: 'Kết quả thứ hai' }];
       if (geocoder) {
-        const ward = selectedWard(body);
+        const ward = selectedWard(body) ?? { latitude: 10.769508, longitude: 106.690795 };
         const benThanh = body.city === 'Hồ Chí Minh' && body.ward === 'Bến Thành';
         searchResult.latitude = benThanh ? 10.769508 : ward.latitude;
         searchResult.longitude = benThanh ? 106.690795 : ward.longitude;
-        searchResult.displayName = `${body.street}, ${ward.fullName}, ${body.city}`;
+        searchResult.displayName = [body.street, ward.fullName, body.city].filter(Boolean).join(', ');
         const valid = {
           place_id: searchResult.id,
           display_name: benThanh ? `${body.street}, Khu phố 3, Phường Bến Thành, Thành phố Thủ Đức, Việt Nam` : searchResult.displayName,
           lat: benThanh ? '10.7695084' : String(ward.latitude), lon: benThanh ? '106.6907953' : String(ward.longitude),
           // Live provider hierarchy anomaly: structured ward/house/road and bbox
           // win over an ambiguous city level; state is absent.
-          address: { country_code: 'vn', suburb: body.ward, road: 'Đường Nguyễn Trãi', house_number: body.street.split(' ')[0],
+          address: { country_code: 'vn', suburb: body.ward, road: body.street.replace(/^\d+[a-z]?(?:[/-]\d+[a-z]?)*\s+/i, ''), house_number: body.street.split(' ')[0],
             ...(benThanh ? { city: 'Thành phố Thủ Đức', neighbourhood: 'Khu phố 3' } : {}),
+            ...(!body.ward ? { state: body.city } : {}),
           },
         };
         const thuDuc = {
@@ -105,35 +108,37 @@ try {
           address: { ...valid.address, city: 'Thành phố Thủ Đức', suburb: 'Linh Chiểu' },
         };
         const fixtures = {
-          success: [thuDuc, valid], empty: [], 'thu-duc': [thuDuc],
+          success: [thuDuc, valid], slow: [valid], empty: [], 'thu-duc': [thuDuc],
           'wrong-province': [{ ...valid, address: { ...valid.address, state: 'Hà Nội' } }],
           'wrong-ward': [{ ...valid, address: { ...valid.address, suburb: 'Phường Sài Gòn' } }],
           'wrong-region': [{ ...valid, address: { ...valid.address, region: 'Hà Nội' } }],
           'wrong-neighbourhood': [{ ...valid, address: { ...valid.address, neighbourhood: 'Phường Sài Gòn' } }],
           'outside-area': [{ ...valid, lat: '10.851', lon: '106.759' }],
+          'street-only': [
+            { ...valid, place_id: 'road-1', class: 'highway', address: { ...valid.address, house_number: undefined, suburb: 'Phường 25', state: body.city } },
+            { ...valid, place_id: 'duplicate-road-1', class: 'highway', address: { ...valid.address, house_number: undefined, suburb: 'Phường 25', state: body.city } },
+            { ...valid, place_id: 'road-2', lat: String(Number(valid.lat) + 0.001), class: 'highway', address: { ...valid.address, house_number: undefined, suburb: 'Phường 22', state: body.city } },
+          ],
         };
         const originalFetch = globalThis.fetch;
+        let attempt = 0;
         globalThis.fetch = async (url) => {
           assert.equal(url.searchParams.get('countrycodes'), 'vn');
           assert.equal(url.searchParams.get('bounded'), '1');
           assert.equal(url.searchParams.get('normalizeaddress'), '1');
-          if (url.pathname.endsWith('/structured')) {
-            assert.equal(url.searchParams.get('street'), body.street);
-            assert.equal(url.searchParams.get('state'), body.city);
-            assert.equal(url.searchParams.has('q'), false);
-          } else {
-            assert.equal(url.searchParams.get('q'), `${body.street}, ${body.ward}, ${body.city}, Việt Nam`);
-          }
+          assert.equal(url.pathname, '/v1/search');
+          assert(url.searchParams.get('q').endsWith(`${body.city}, Việt Nam`));
           assert(url.searchParams.get('viewbox'));
-          return new Response(JSON.stringify(fixtures[searchResponse]));
+          attempt++;
+          return new Response(JSON.stringify(responseMode === 'street-only' && attempt < 4 ? [] : fixtures[responseMode]));
         };
         try { data = await geocoder.search(body); }
         finally { globalThis.fetch = originalFetch; }
-        assert(!data.some((result) => result.id === 'thu-duc'));
+        if (body.ward) assert(!data.some((result) => result.id === 'thu-duc'));
         for (const result of data) {
           assert.equal(result.city, body.city);
-          assert.equal(result.ward, body.ward);
-          assert.equal(result.displayName, searchResult.displayName);
+          assert.equal(result.ward, body.ward || undefined);
+          if (!['wrong-ward', 'wrong-neighbourhood', 'street-only'].includes(responseMode)) assert.equal(result.displayName, searchResult.displayName);
         }
       }
     }
@@ -218,7 +223,7 @@ try {
       assert.equal(searches, before + 1);
       await expect(map).toHaveCount(0);
       await expect(selectedText()).toHaveText(previous);
-      await page.getByRole('button', { name: searchResult.displayName, exact: true }).click();
+      await page.getByRole('list', { name: 'Kết quả tìm địa chỉ' }).getByRole('button').filter({ hasText: searchResult.displayName }).first().click();
       await expect(city).toHaveValue(previousCity);
       await expect(ward).toHaveValue(previousWard);
       await expect(page.locator('.leaflet-marker-draggable')).toHaveCount(1);
@@ -459,7 +464,7 @@ try {
   }
   if (searchMode) {
     addresses = [];
-    for (const failure of ['empty', 'error', ...(validatedSearch ? ['thu-duc', 'wrong-province', 'wrong-ward', 'wrong-region', 'wrong-neighbourhood', 'outside-area'] : [])]) {
+    for (const failure of ['empty', 'error', 'rate-limited', ...(validatedSearch ? ['thu-duc', 'wrong-province', 'wrong-region', 'outside-area'] : [])]) {
       searchResponse = failure;
       await open('/addresses');
       await choose(city, 'ho chi minh', 'Hồ Chí Minh');
@@ -467,7 +472,7 @@ try {
       await expect(page.getByRole('button', { name: 'Tìm địa chỉ', exact: true })).toBeDisabled();
       await page.getByLabel('Số nhà, tên đường').fill('123 Nguyễn Trãi');
       await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).click();
-      await expect(page.getByText(failure !== 'error'
+      await expect(page.getByText(failure === 'rate-limited' ? 'Đã đạt giới hạn tìm địa chỉ. Vui lòng chờ một lúc hoặc đặt pin thủ công.' : failure !== 'error'
         ? 'Không tìm thấy địa chỉ chính xác. Bạn có thể đặt pin thủ công trong khu vực đã chọn.'
         : 'Không thể tìm địa chỉ lúc này. Hãy thử lại hoặc đặt pin thủ công.')).toBeVisible();
       await expect(page.getByRole('list', { name: 'Kết quả tìm địa chỉ' })).toHaveCount(0);
@@ -478,18 +483,69 @@ try {
       await expect(city).toHaveValue('Hồ Chí Minh');
       await expect(ward).toHaveValue('Bến Thành');
     }
-    searchResponse = 'success';
+    searchResponse = 'slow';
     await open('/addresses');
     await choose(city, 'ho chi minh', 'Hồ Chí Minh');
     await choose(ward, 'ben thanh', 'Bến Thành');
     await page.getByLabel('Số nhà, tên đường').fill('123 Nguyễn Trãi');
     await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).click();
     await page.getByLabel('Số nhà, tên đường').fill('124 Nguyễn Trãi');
-    await page.waitForTimeout(400);
+    searchResponse = 'success';
+    await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).click();
+    await expect(page.getByRole('list', { name: 'Kết quả tìm địa chỉ' })).toContainText('124 Nguyễn Trãi');
+    await page.waitForTimeout(1400);
+    await expect(page.getByRole('list', { name: 'Kết quả tìm địa chỉ' })).not.toContainText('123 Nguyễn Trãi');
+    await page.getByLabel('Số nhà, tên đường').fill('125 Nguyễn Trãi');
     await expect(page.getByRole('list', { name: 'Kết quả tìm địa chỉ' })).toHaveCount(0);
     await expect(map).toHaveCount(0);
     console.log(`PASS explicit search: typing 0, double-click 1, ${directSearch ? 'direct numeric draft/confirm (no map adjustment)' : 'choice/draft/drag/confirm'}, all forms, numeric request payloads, reload, stale payloads, fail/empty manual fallback, cancelled stale response`);
-    if (validatedSearch) console.log('PASS raw provider → backend normalization → UI: live city anomaly selectable with canonical label and real coordinate; outside area/wrong province/region/ward not selectable; manual fallback preserves selectors');
+    if (validatedSearch) {
+      for (const size of [{ width: 375, height: 812 }, { width: 812, height: 375 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {
+        await page.setViewportSize(size);
+        for (const mode of ['street-only', 'wrong-ward', 'wrong-neighbourhood']) {
+          searchResponse = mode;
+          await open('/addresses');
+          await choose(city, 'ho chi minh', 'Hồ Chí Minh');
+          const wardName = mode === 'street-only' ? 'Thạnh Mỹ Tây' : 'Bến Thành';
+          await choose(ward, wardName, wardName);
+          await page.getByLabel('Số nhà, tên đường').fill(mode === 'street-only' ? '475A Điện Biên Phủ' : '123 Nguyễn Trãi');
+          await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).click();
+          const options = page.getByRole('list', { name: 'Kết quả tìm địa chỉ' }).getByRole('button');
+          await expect(options).toHaveCount(mode === 'street-only' ? 2 : 1);
+          await expect(options.first()).toContainText('Khu vực theo bản đồ:');
+          await expect(options.first()).toContainText('Tên khu vực trên bản đồ khác lựa chọn của bạn');
+          await expect(map).toHaveCount(0);
+          await expect(selectedText()).toHaveText('Chưa chọn vị trí');
+          if (mode === 'street-only') {
+            await expect(options.first()).toContainText('chưa xác định số nhà');
+            await expect(options.first()).not.toContainText('475A');
+            await mkdir('test-results/address-geocoding', { recursive: true });
+            await page.getByRole('list', { name: 'Kết quả tìm địa chỉ' }).screenshot({ path: `test-results/address-geocoding/results-${size.width}.png` });
+          }
+          const chosen = options.last();
+          const coordinate = await chosen.locator('.tabular-nums').innerText();
+          await chosen.focus();
+          await chosen.press('Enter');
+          await expect(page.locator('.leaflet-marker-icon')).toHaveCount(1);
+          await expect.poll(() => page.locator('.leaflet-tile[src*=".org/16/"]').count()).toBeGreaterThan(0);
+          await expect(page.locator('section[aria-label^="Vị trí"] [role="status"]').last()).toHaveText(coordinate);
+          await expect(selectedText()).toHaveText('Chưa chọn vị trí');
+          await confirm.click();
+          await expect(selectedText()).toHaveText(coordinate);
+          await expect(city).toHaveValue('Hồ Chí Minh');
+          await expect(ward).toHaveValue(wardName);
+          assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        }
+      }
+      searchResponse = 'success';
+      await open('/addresses');
+      await choose(city, 'ho chi minh', 'Hồ Chí Minh');
+      await page.getByLabel('Số nhà, tên đường').fill('123 Nguyễn Trãi');
+      await page.getByRole('button', { name: 'Tìm địa chỉ', exact: true }).click();
+      await expect(page.getByRole('list', { name: 'Kết quả tìm địa chỉ' })).toBeVisible();
+      await expect(ward).toHaveValue('');
+      console.log('PASS raw provider → backend → UI: four-step fallback, multiple approximate segments, dedupe, keyboard choice, coordinates, canonical selectors unchanged, optional search ward, stale latest-search response, four viewports');
+    }
   }
   if (currentLocation) {
     addresses = [];

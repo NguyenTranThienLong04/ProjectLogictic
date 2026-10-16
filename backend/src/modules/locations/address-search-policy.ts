@@ -1,6 +1,7 @@
 import {
   findProvince,
   findWard,
+  getProvinceWards,
   normalizeAdministrativeSearch,
   type Province,
   type Ward,
@@ -8,7 +9,7 @@ import {
 
 import type { LocationIqAddress } from './locationiq-address-normalization.js';
 
-export type SelectedAdministration = { province: Province; ward: Ward };
+export type SelectedAdministration = { province: Province; ward?: Ward };
 
 const isWardLabel = (name: string): boolean =>
   /^(phuong|xa|dac khu)\s+|\s+(ward|commune)$/.test(normalizeAdministrativeSearch(name));
@@ -16,16 +17,18 @@ const isDistrictLabel = (name: string): boolean =>
   /^(quan|huyen|district)\s+|\s+district$/.test(normalizeAdministrativeSearch(name));
 
 // This snapshot contains approximate centres, not administrative boundaries.
-// Reuse this same search window for retrieval AND containment checks. It is not
-// a ward polygon, so explicit conflicting administrative metadata still vetoes it.
-export function addressSearchViewbox({ ward }: SelectedAdministration): string {
+// Reuse this search window for retrieval AND containment. With no ward selected,
+// the catalogue's ward centres define a province search envelope, NOT a polygon
+// or proof of service eligibility. No geographic data is invented or persisted.
+export function addressSearchViewbox({ province, ward }: SelectedAdministration): string {
+  const points = ward ? [ward] : getProvinceWards(province.code);
   const latitudeDelta = 0.05;
-  const longitudeDelta = latitudeDelta / Math.cos((ward.latitude * Math.PI) / 180);
+  const longitudeDelta = latitudeDelta / Math.cos(((ward ?? province).latitude * Math.PI) / 180);
   return [
-    ward.longitude - longitudeDelta,
-    ward.latitude - latitudeDelta,
-    ward.longitude + longitudeDelta,
-    ward.latitude + latitudeDelta,
+    Math.min(...points.map((point) => point.longitude)) - longitudeDelta,
+    Math.min(...points.map((point) => point.latitude)) - latitudeDelta,
+    Math.max(...points.map((point) => point.longitude)) + longitudeDelta,
+    Math.max(...points.map((point) => point.latitude)) + latitudeDelta,
   ]
     .map((coordinate) => coordinate.toFixed(6))
     .join(',');
@@ -40,16 +43,33 @@ export function isInAddressSearchArea(
   return latitude >= south && latitude <= north && longitude >= west && longitude <= east;
 }
 
-export function matchesSearchStreet(address: LocationIqAddress, street: string): boolean {
+// Keep the house token separate without discarding suffixes or alley numbers.
+export function splitSearchStreet(street: string): { houseNumber?: string; road: string } {
+  const value = street.normalize('NFC').trim().replace(/\s+/g, ' ');
+  const house = value.match(/^(\d+[a-z]?(?:[/-]\d+[a-z]?)*)(?:\s*,\s*|\s+)(.+)$/i);
+  return house ? { houseNumber: house[1], road: house[2] } : { road: value };
+}
+
+export function matchesSearchStreet(
+  address: LocationIqAddress,
+  street: string,
+  allowStreet = false,
+): boolean {
   const normalizeRoad = (name: string) =>
     normalizeAdministrativeSearch(name)
-      .replace(/^(duong|street)\s+/, '')
+      // Some OSM names use Latin eth (Ð) instead of Vietnamese Đ.
+      .replace(/ð/g, 'd')
+      .replace(/^(duong|pho|street)\s+/, '')
       .replace(/\s+street$/, '');
-  const requested = normalizeAdministrativeSearch(street);
-  const house = requested.match(/^(\d+[a-z]?(?:[/-]\d+[a-z]?)*)(?:\s*,\s*|\s+)(.+)$/);
+  const requested = splitSearchStreet(street);
   const road = address.road;
-  if (!road || normalizeRoad(road) !== normalizeRoad(house ? house[2] : requested)) return false;
-  return !house || normalizeAdministrativeSearch(address.houseNumber ?? '') === house[1];
+  if (!road || normalizeRoad(road) !== normalizeRoad(requested.road)) return false;
+  return (
+    !requested.houseNumber ||
+    (allowStreet && !address.houseNumber) ||
+    normalizeAdministrativeSearch(address.houseNumber ?? '') ===
+      normalizeAdministrativeSearch(requested.houseNumber)
+  );
 }
 
 // Run together with coordinate containment and structured street/house matching.
@@ -67,33 +87,40 @@ export function assessAdministration(
   )
     return reject('conflicting_country');
   const sameProvince = (name: string) => findProvince(name)?.code === province.code;
-  const sameWard = (name: string) => findWard(province.code, name)?.code === ward.code;
+  const sameWard = (name: string) =>
+    Boolean(ward && findWard(province.code, name)?.code === ward.code);
   for (const { field, name } of address.provinceLevels) {
     if (!sameProvince(name)) return reject(`conflicting_${field}`);
   }
 
-  let wardMatched = false;
   const isSubwardLabel = (name: string) =>
     /^(khu pho|to dan pho|khu dan cu|ap|thon)\s+/.test(normalizeAdministrativeSearch(name));
   for (const { field, name } of address.wardLevels) {
-    if (sameWard(name)) wardMatched = true;
+    if (!ward || sameWard(name)) continue;
     // Provider suburb/quarter sometimes describe an older district or a smaller
     // community. An explicit ward field never gets this exception.
     else if (field !== 'ward' && (isDistrictLabel(name) || isSubwardLabel(name))) continue;
-    else return reject(`conflicting_${field}`);
+    else warnings.push(`provider_ward_mismatch:${field}`);
   }
   for (const { field, name } of address.localLevels) {
-    if (sameWard(name)) wardMatched = true;
+    if (!ward || sameWard(name)) continue;
     else if (isWardLabel(name) || findWard(province.code, name))
-      return reject(`conflicting_${field}`);
+      warnings.push(`provider_ward_mismatch:${field}`);
     // An unclassified local name is not proof of either a match or a conflict.
   }
   for (const { field, name } of address.intermediateLevels) {
     if (!sameProvince(name) && !sameWard(name) && !isDistrictLabel(name))
       warnings.push(`provider_hierarchy_anomaly:${field}`);
   }
-  // A soft anomaly may only be overridden by affirmative structured ward proof;
-  // a display-name match or the ambiguous city level cannot supply that proof.
-  if (warnings.length && !wardMatched) return reject('hierarchy_anomaly_without_ward_match');
+  // Provider ward/intermediate labels may lag the canonical catalogue. Street
+  // evidence plus coordinate containment is mandatory at the caller instead.
+  // A province-wide search needs positive province evidence as well.
+  if (
+    !ward &&
+    ![...address.provinceLevels, ...address.intermediateLevels].some(({ name }) =>
+      sameProvince(name),
+    )
+  )
+    return reject('missing_province_evidence');
   return { warnings };
 }
